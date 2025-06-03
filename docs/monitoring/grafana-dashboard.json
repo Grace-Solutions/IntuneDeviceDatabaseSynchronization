@@ -1,0 +1,289 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Intune Device Synchronization Dashboard",
+    "tags": ["intune", "device-sync", "monitoring"],
+    "style": "dark",
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Sync Operations Overview",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "increase(sync_success_total[1h])",
+            "legendFormat": "Successful Syncs (1h)"
+          },
+          {
+            "expr": "increase(sync_failure_total[1h])",
+            "legendFormat": "Failed Syncs (1h)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short",
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Current Device Count",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "devices_current_count",
+            "legendFormat": "Total Devices"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 5000}
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Sync Duration",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sync_duration_seconds",
+            "legendFormat": "Sync Duration"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "s",
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Device Processing Rate",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(devices_processed_total[5m])",
+            "legendFormat": "Devices/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "ops",
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Database Operations",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "rate(db_insert_total[5m])",
+            "legendFormat": "Inserts/sec"
+          },
+          {
+            "expr": "rate(db_update_total[5m])",
+            "legendFormat": "Updates/sec"
+          },
+          {
+            "expr": "rate(db_skip_total[5m])",
+            "legendFormat": "Skips/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "ops",
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Device OS Filter Statistics",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "device_filter_matched_total",
+            "legendFormat": "Matched Devices"
+          },
+          {
+            "expr": "device_filter_skipped_total",
+            "legendFormat": "Filtered Out"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Authentication & HTTP Metrics",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(token_refresh_total[5m])",
+            "legendFormat": "Token Refreshes/sec"
+          },
+          {
+            "expr": "rate(auth_failure_total[5m])",
+            "legendFormat": "Auth Failures/sec"
+          },
+          {
+            "expr": "rate(http_errors_total[5m])",
+            "legendFormat": "HTTP Errors/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "ops",
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Error Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "rate(sync_failure_total[1h]) / rate(sync_success_total[1h] + sync_failure_total[1h]) * 100",
+            "legendFormat": "Error Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 10}
+              ]
+            },
+            "unit": "percent",
+            "max": 100,
+            "min": 0
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Database Errors",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 32},
+        "targets": [
+          {
+            "expr": "increase(db_error_total[1h])",
+            "legendFormat": "DB Errors (1h)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 5}
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "HTTP Request Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 32},
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "Requests/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Service Uptime",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 32},
+        "targets": [
+          {
+            "expr": "time() - process_start_time_seconds",
+            "legendFormat": "Uptime"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "palette-classic"},
+            "unit": "s"
+          }
+        }
+      }
+    ],
+    "templating": {
+      "list": [
+        {
+          "name": "instance",
+          "type": "query",
+          "query": "label_values(sync_success_total, instance)",
+          "refresh": 1,
+          "includeAll": true,
+          "multi": true
+        }
+      ]
+    },
+    "annotations": {
+      "list": [
+        {
+          "name": "Sync Events",
+          "datasource": "Prometheus",
+          "expr": "changes(sync_success_total[1m]) > 0",
+          "titleFormat": "Sync Completed",
+          "textFormat": "Device sync operation completed successfully"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+﻿{
+    "BinaryPath":  ".\\dist\\windows\\IntuneDeviceDatabaseSynchronization.exe",
+    "Platform":  "windows",
+    "Version":  "2025.06.02.2233",
+    "BinarySize":  14166016,
+    "BuildTimestamp":  "2025-06-02 22:33:19 UTC",
+    "GitCommit":  "4d1165ccd15d2f8af398b3e035df0229fe02650e",
+    "BuildUser":  "gsadmin",
+    "Target":  "x86_64-pc-windows-msvc",
+    "Configuration":  "Release",
+    "BuildMachine":  "CND04700NS",
+    "ProductName":  "IntuneDeviceDatabaseSynchronization"
+}

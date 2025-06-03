@@ -1,0 +1,77 @@
+[package]
+name = "IntuneDeviceDatabaseSynchronization"
+version = "1.0.0"
+edition = "2021"
+authors = ["Your Organization"]
+description = "Microsoft Intune device synchronization service with OS filtering and multi-database support"
+license = "GPL-3.0"
+build = "build.rs"
+
+[[bin]]
+name = "IntuneDeviceDatabaseSynchronization"
+path = "src/main.rs"
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1.0", features = ["full"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+async-trait = "0.1"
+
+# HTTP client and server
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+hyper = { version = "0.14", features = ["full"] }
+axum = "0.7"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Configuration
+config = "0.14"
+dotenvy = "0.15"
+
+# UUID and crypto
+uuid = { version = "1.0", features = ["v4", "serde"] }
+sha2 = "0.10"
+
+# Database drivers
+rusqlite = { version = "0.30", features = ["bundled", "uuid"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json"] }
+tiberius = { version = "0.12", features = ["tokio", "native-tls", "chrono"] }
+
+# Time and scheduling
+chrono = { version = "0.4", features = ["serde"] }
+cron = "0.12"
+
+# Logging
+log = "0.4"
+flexi_logger = { version = "0.27", features = ["async", "compress"] }
+
+# Metrics
+prometheus = { version = "0.13", features = ["process"] }
+lazy_static = "1.4"
+
+# CLI and service management
+clap = { version = "4.0", features = ["derive"] }
+windows-service = "0.6"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Utilities
+base64 = "0.21"
+url = "2.4"
+regex = "1.10"
+hex = "0.4"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "winsvc"] }
+
+[build-dependencies]
+chrono = "0.4"
+winres = "0.1"
+
+[dev-dependencies]
+tempfile = "3.8"
+mockito = "1.2"

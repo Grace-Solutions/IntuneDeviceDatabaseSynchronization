@@ -1,0 +1,49 @@
+{
+  "clientId": "YOUR_AZURE_CLIENT_ID",
+  "clientSecret": "YOUR_AZURE_CLIENT_SECRET",
+  "tenantId": "YOUR_AZURE_TENANT_ID",
+  "pollInterval": "1h",
+  "cronSchedule": null,
+  "deviceOsFilter": ["Windows", "macOS", "Android", "iOS"],
+  "enablePrometheus": true,
+  "prometheusPort": 9898,
+  "logLevel": "info",
+  "database": {
+    "backends": ["sqlite"],
+    "tableName": "devices",
+    "sqlitePath": "./output/devices.db",
+    "postgres": {
+      "connectionString": "postgres://user:password@localhost:5432/intune_devices"
+    },
+    "mssql": {
+      "connectionString": "server=localhost;database=intune_devices;trusted_connection=true"
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "directory": "./backups",
+    "maxBackups": 10,
+    "scheduleEnabled": true,
+    "scheduleInterval": "24h"
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "https://your-webhook-endpoint.com/intune-sync",
+    "timeout_seconds": 30,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5,
+    "events": [
+      "sync_started",
+      "sync_completed",
+      "sync_failed",
+      "devices_updated",
+      "database_error",
+      "authentication_failed"
+    ],
+    "headers": {
+      "Authorization": "Bearer your-token",
+      "X-Service": "IntuneDeviceSync"
+    },
+    "secret": "your-webhook-secret-for-signature-verification"
+  }
+}
