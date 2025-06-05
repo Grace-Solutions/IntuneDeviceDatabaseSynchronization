@@ -11,22 +11,32 @@ pub struct AppConfig {
     pub client_secret: String,
     #[serde(rename = "tenantId")]
     pub tenant_id: String,
-    #[serde(rename = "pollInterval", default = "default_poll_interval")]
-    pub poll_interval: String,
+    #[serde(rename = "pollInterval", default = "default_poll_interval_option")]
+    pub poll_interval: Option<String>,
+    #[serde(rename = "cronSchedule")]
+    pub cron_schedule: Option<String>,
     #[serde(rename = "deviceOsFilter", default = "default_device_os_filter")]
     pub device_os_filter: Vec<String>,
     #[serde(rename = "enablePrometheus", default = "default_enable_prometheus")]
     pub enable_prometheus: bool,
     #[serde(rename = "prometheusPort", default = "default_prometheus_port")]
     pub prometheus_port: u16,
-    #[serde(rename = "prometheusScrapeInterval", default = "default_prometheus_scrape_interval")]
-    pub prometheus_scrape_interval: String,
+    #[serde(rename = "logLevel", default = "default_log_level")]
+    pub log_level: String,
     pub database: DatabaseConfig,
+    pub backup: Option<crate::backup::BackupConfig>,
+    pub webhook: Option<crate::webhook::WebhookConfig>,
+    #[serde(rename = "rateLimit")]
+    pub rate_limit: Option<crate::rate_limiter::RateLimitConfig>,
+    #[serde(rename = "mockGraphApi")]
+    pub mock_graph_api: Option<crate::mock_graph_api::MockGraphApiConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
     pub backends: Vec<String>,
+    #[serde(rename = "tableName", default = "default_table_name")]
+    pub table_name: String,
     #[serde(rename = "sqlitePath", default = "default_sqlite_path")]
     pub sqlite_path: String,
     pub postgres: Option<PostgresConfig>,
@@ -52,6 +62,10 @@ fn default_poll_interval() -> String {
     "1h".to_string()
 }
 
+fn default_poll_interval_option() -> Option<String> {
+    Some("1h".to_string())
+}
+
 fn default_device_os_filter() -> Vec<String> {
     vec!["*".to_string()]
 }
@@ -64,8 +78,8 @@ fn default_prometheus_port() -> u16 {
     9898
 }
 
-fn default_prometheus_scrape_interval() -> String {
-    "0 */30 * * * *".to_string()
+fn default_log_level() -> String {
+    "info".to_string()
 }
 
 fn default_sqlite_path() -> String {
@@ -94,17 +108,23 @@ impl AppConfig {
                 client_id: String::new(),
                 client_secret: String::new(),
                 tenant_id: String::new(),
-                poll_interval: default_poll_interval(),
+                poll_interval: Some(default_poll_interval()),
+                cron_schedule: None,
                 device_os_filter: default_device_os_filter(),
                 enable_prometheus: default_enable_prometheus(),
                 prometheus_port: default_prometheus_port(),
-                prometheus_scrape_interval: default_prometheus_scrape_interval(),
+                log_level: default_log_level(),
                 database: DatabaseConfig {
                     backends: vec!["sqlite".to_string()],
+                    table_name: default_table_name(),
                     sqlite_path: default_sqlite_path(),
                     postgres: None,
                     mssql: None,
                 },
+                backup: None,
+                webhook: None,
+                rate_limit: None,
+                mock_graph_api: None,
             }
         };
 
@@ -119,7 +139,7 @@ impl AppConfig {
             config.tenant_id = tenant_id;
         }
         if let Ok(poll_interval) = env::var("POLL_INTERVAL") {
-            config.poll_interval = poll_interval;
+            config.poll_interval = Some(poll_interval);
         }
         if let Ok(device_os_filter) = env::var("DEVICE_OS_FILTER") {
             config.device_os_filter = device_os_filter
@@ -134,9 +154,7 @@ impl AppConfig {
         if let Ok(prometheus_port) = env::var("PROMETHEUS_PORT") {
             config.prometheus_port = prometheus_port.parse().unwrap_or(9898);
         }
-        if let Ok(prometheus_scrape_interval) = env::var("PROMETHEUS_SCRAPE_INTERVAL") {
-            config.prometheus_scrape_interval = prometheus_scrape_interval;
-        }
+        // Remove prometheus_scrape_interval - no longer used
         if let Ok(mssql_connection) = env::var("MSSQL_CONNECTION_STRING") {
             if config.database.mssql.is_none() {
                 config.database.mssql = Some(MssqlConfig {
@@ -173,7 +191,11 @@ impl AppConfig {
     }
 
     pub fn parse_poll_interval(&self) -> Result<std::time::Duration> {
-        parse_duration(&self.poll_interval)
+        if let Some(ref interval) = self.poll_interval {
+            parse_duration(interval)
+        } else {
+            parse_duration("1h") // Default fallback
+        }
     }
 }
 

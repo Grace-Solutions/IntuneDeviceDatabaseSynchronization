@@ -5,6 +5,30 @@ use serde::{Deserialize, Serialize};
 use anyhow::{Result, Context};
 use log::{info, warn, error};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BackupConfig {
+    pub enabled: bool,
+    pub directory: String,
+    #[serde(rename = "maxBackups")]
+    pub max_backups: usize,
+    #[serde(rename = "scheduleEnabled")]
+    pub schedule_enabled: bool,
+    #[serde(rename = "scheduleInterval")]
+    pub schedule_interval: Option<String>,
+}
+
+impl Default for BackupConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            directory: "./backups".to_string(),
+            max_backups: 10,
+            schedule_enabled: true,
+            schedule_interval: Some("24h".to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BackupMetadata {
     pub created_at: DateTime<Utc>,

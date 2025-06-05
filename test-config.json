@@ -1,10 +1,10 @@
 {
-  "clientId": "YOUR_AZURE_CLIENT_ID",
-  "clientSecret": "YOUR_AZURE_CLIENT_SECRET",
-  "tenantId": "YOUR_AZURE_TENANT_ID",
+  "clientId": "12345678-1234-1234-1234-123456789012",
+  "clientSecret": "valid-secret-here",
+  "tenantId": "87654321-4321-4321-4321-210987654321",
   "pollInterval": "1h",
   "cronSchedule": null,
-  "deviceOsFilter": ["Windows", "macOS", "Android", "iOS"],
+  "deviceOsFilter": ["Windows", "macOS"],
   "enablePrometheus": true,
   "prometheusPort": 9898,
   "logLevel": "info",
@@ -16,7 +16,8 @@
       "connectionString": "postgres://user:password@localhost:5432/intune_devices"
     },
     "mssql": {
-      "connectionString": "server=localhost;database=intune_devices;trusted_connection=true"
+      "connectionString": "server=localhost;database=intune_devices;trusted_connection=true",
+      "tableName": "devices"
     }
   },
   "backup": {
@@ -34,7 +35,7 @@
     "retry_delay_seconds": 5,
     "events": [
       "sync_started",
-      "sync_completed",
+      "sync_completed", 
       "sync_failed",
       "devices_updated",
       "database_error",

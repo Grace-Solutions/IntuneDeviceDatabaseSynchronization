@@ -49,7 +49,7 @@ impl SyncService {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        info!("Starting sync service with interval: {}", self.config.poll_interval);
+        info!("Starting sync service with interval: {:?}", self.config.poll_interval);
         
         // Parse poll interval
         let poll_duration = self.config.parse_poll_interval()
@@ -241,17 +241,23 @@ mod tests {
             client_id: "test".to_string(),
             client_secret: "test".to_string(),
             tenant_id: "test".to_string(),
-            poll_interval: "1h".to_string(),
+            poll_interval: Some("1h".to_string()),
+            cron_schedule: None,
             device_os_filter: vec!["*".to_string()],
             enable_prometheus: false,
             prometheus_port: 9898,
-            prometheus_scrape_interval: "1h".to_string(),
+            log_level: "info".to_string(),
             database: crate::config::DatabaseConfig {
                 backends: vec!["sqlite".to_string()],
+                table_name: "devices".to_string(),
                 sqlite_path: ":memory:".to_string(),
                 postgres: None,
                 mssql: None,
             },
+            backup: None,
+            webhook: None,
+            rate_limit: None,
+            mock_graph_api: None,
         };
         
         let auth_client = AuthClient::new(config);

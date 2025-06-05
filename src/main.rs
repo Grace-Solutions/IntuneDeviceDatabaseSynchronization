@@ -7,10 +7,13 @@ use tokio::signal;
 mod auth;
 mod backup;
 mod config;
+mod config_validator;
 mod filter;
 mod fingerprint;
 mod logging;
 mod metrics;
+mod mock_graph_api;
+mod rate_limiter;
 mod storage;
 mod sync;
 mod uuid_utils;
@@ -49,6 +52,12 @@ enum Commands {
     Run,
     /// Show detailed version information
     Version,
+    /// Validate configuration file
+    Validate {
+        /// Path to configuration file (default: config.json)
+        #[arg(short, long)]
+        config: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -66,6 +75,9 @@ async fn main() -> Result<()> {
         Commands::Version => {
             version::print_version_info();
             Ok(())
+        }
+        Commands::Validate { config } => {
+            config_validator::validate_config_command(config)
         }
     }
 }

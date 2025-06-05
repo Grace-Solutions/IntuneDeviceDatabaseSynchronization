@@ -1,0 +1,35 @@
+{
+  "clientId": "12345678-1234-1234-1234-123456789012",
+  "clientSecret": "valid-secret-here",
+  "tenantId": "87654321-4321-4321-4321-210987654321",
+  "pollInterval": "30s",
+  "deviceOsFilter": ["Windows", "macOS"],
+  "enablePrometheus": true,
+  "prometheusPort": 9898,
+  "logLevel": "debug",
+  "database": {
+    "backends": ["sqlite"],
+    "tableName": "devices",
+    "sqlitePath": "./test-devices.db"
+  },
+  "mockGraphApi": {
+    "enabled": true,
+    "deviceCount": 10,
+    "simulateRateLimits": true,
+    "rateLimitProbability": 0.2,
+    "simulateAuthFailures": false,
+    "authFailureProbability": 0.0,
+    "simulateNetworkErrors": false,
+    "networkErrorProbability": 0.0,
+    "responseDelayMs": [50, 200],
+    "deviceUpdateFrequency": 0.3
+  },
+  "rateLimit": {
+    "maxRequestsPerMinute": 30,
+    "initialRetryDelaySeconds": 2,
+    "maxRetryDelaySeconds": 60,
+    "maxRetryAttempts": 3,
+    "backoffMultiplier": 2.0,
+    "enableJitter": true
+  }
+}

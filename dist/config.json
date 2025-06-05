@@ -45,25 +45,5 @@
       "X-Service": "IntuneDeviceSync"
     },
     "secret": "your-webhook-secret-for-signature-verification"
-  },
-  "rateLimit": {
-    "maxRequestsPerMinute": 60,
-    "initialRetryDelaySeconds": 1,
-    "maxRetryDelaySeconds": 300,
-    "maxRetryAttempts": 5,
-    "backoffMultiplier": 2.0,
-    "enableJitter": true
-  },
-  "mockGraphApi": {
-    "enabled": false,
-    "deviceCount": 100,
-    "simulateRateLimits": false,
-    "rateLimitProbability": 0.1,
-    "simulateAuthFailures": false,
-    "authFailureProbability": 0.05,
-    "simulateNetworkErrors": false,
-    "networkErrorProbability": 0.02,
-    "responseDelayMs": [100, 500],
-    "deviceUpdateFrequency": 0.1
   }
 }

@@ -1,0 +1,13 @@
+{
+  "clientId": "12345678-1234-1234-1234-123456789012",
+  "clientSecret": "valid-secret-here",
+  "tenantId": "87654321-4321-4321-4321-210987654321"
+  // Missing comma here
+  "pollInterval": "invalid-duration",
+  "prometheusPort": 0,
+  "logLevel": "invalid-level",
+  "database": {
+    "backends": [],
+    "tableName": ""
+  }
+}
