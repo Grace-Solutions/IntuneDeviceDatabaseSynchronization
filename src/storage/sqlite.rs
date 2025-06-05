@@ -332,12 +332,12 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let db_path = temp_file.path().to_str().unwrap();
         
-        let backend = SqliteBackend::new(db_path).await.unwrap();
+        let mut backend = SqliteBackend::new(db_path).await.unwrap();
         backend.initialize().await.unwrap();
-        
+
         // Test health check
         backend.health_check().await.unwrap();
-        
+
         // Test device count
         let count = backend.get_device_count().await.unwrap();
         assert_eq!(count, 0);

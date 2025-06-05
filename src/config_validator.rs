@@ -196,7 +196,7 @@ impl ConfigValidator {
                 }
             }
             Err(e) => {
-                let (line, column) = extract_json_error_position(&e);
+                let (_line, _column) = extract_json_error_position(&e);
                 validator.add_error(
                     "root".to_string(),
                     ValidationErrorType::InvalidFormat,

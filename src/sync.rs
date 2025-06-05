@@ -235,8 +235,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn test_extract_metadata() {
+    #[tokio::test]
+    async fn test_extract_metadata() {
         let config = AppConfig {
             client_id: "test".to_string(),
             client_secret: "test".to_string(),
@@ -260,11 +260,14 @@ mod tests {
             mock_graph_api: None,
         };
         
-        let auth_client = AuthClient::new(config);
+        let auth_client = AuthClient::new(config.clone());
+        let mut storage_manager = StorageManager::new(&config.database).await.unwrap();
+        storage_manager.initialize().await.unwrap();
+
         let sync_service = SyncService {
-            config: auth_client.config.clone(),
+            config: config.clone(),
             auth_client,
-            storage: StorageManager { backends: vec![] }, // Mock for test
+            storage: storage_manager,
             os_filter: DeviceOsFilter::new(&["*".to_string()]),
         };
         
