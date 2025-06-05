@@ -11,7 +11,7 @@
   "database": {
     "backends": ["sqlite"],
     "tableName": "devices",
-    "sqlitePath": "./output/devices.db",
+    "sqlitePath": "./data/intune_devices.db",
     "postgres": {
       "connectionString": "postgres://user:password@localhost:5432/intune_devices"
     },
@@ -19,9 +19,63 @@
       "connectionString": "server=localhost;database=intune_devices;trusted_connection=true"
     }
   },
+  "endpoints": {
+    "endpoints": [
+      {
+        "name": "devices",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices",
+        "tableName": "devices",
+        "enabled": true,
+        "queryParams": {},
+        "selectFields": null,
+        "filter": null,
+        "fieldMappings": {}
+      },
+      {
+        "name": "users",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/users",
+        "tableName": "users",
+        "enabled": false,
+        "queryParams": {},
+        "selectFields": [
+          "id",
+          "userPrincipalName",
+          "displayName",
+          "mail",
+          "jobTitle",
+          "department",
+          "companyName",
+          "accountEnabled",
+          "createdDateTime",
+          "lastSignInDateTime"
+        ],
+        "filter": null,
+        "fieldMappings": {}
+      },
+      {
+        "name": "groups",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/groups",
+        "tableName": "groups",
+        "enabled": false,
+        "queryParams": {},
+        "selectFields": [
+          "id",
+          "displayName",
+          "description",
+          "groupTypes",
+          "mail",
+          "mailEnabled",
+          "securityEnabled",
+          "createdDateTime"
+        ],
+        "filter": null,
+        "fieldMappings": {}
+      }
+    ]
+  },
   "backup": {
     "enabled": true,
-    "directory": "./backups",
+    "directory": "./data/backups",
     "maxBackups": 10,
     "scheduleEnabled": true,
     "scheduleInterval": "24h"

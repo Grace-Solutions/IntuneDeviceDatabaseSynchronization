@@ -76,6 +76,41 @@ impl PostgresBackend {
         Ok(())
     }
 
+    /// Convert JSON value to a generic record for database storage
+    fn json_to_generic_record(&self, json: &serde_json::Value) -> Result<std::collections::HashMap<String, String>> {
+        let mut record = std::collections::HashMap::new();
+
+        if let Some(obj) = json.as_object() {
+            for (key, value) in obj {
+                // Convert all values to strings for simplicity
+                let string_value = match value {
+                    serde_json::Value::Null => "".to_string(),
+                    serde_json::Value::Bool(b) => b.to_string(),
+                    serde_json::Value::Number(n) => n.to_string(),
+                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+                        // Store complex types as JSON strings
+                        value.to_string()
+                    }
+                };
+
+                record.insert(key.clone(), string_value);
+            }
+        }
+
+        // Add common fields if not present
+        if !record.contains_key("id") {
+            // Generate a UUID for the record if no ID is present
+            record.insert("id".to_string(), uuid::Uuid::new_v4().to_string());
+        }
+
+        if !record.contains_key("last_sync_date_time") {
+            record.insert("last_sync_date_time".to_string(), chrono::Utc::now().to_rfc3339());
+        }
+
+        Ok(record)
+    }
+
     async fn create_tables(&self) -> Result<()> {
         // Main devices table
         sqlx::query(
@@ -320,6 +355,65 @@ impl StorageBackend for PostgresBackend {
             .fetch_one(&self.pool)
             .await?;
         Ok(())
+    }
+
+    async fn create_table_if_not_exists(&mut self, table_name: &str, schema: &str) -> Result<()> {
+        sqlx::query(schema)
+            .execute(&self.pool)
+            .await
+            .context("Failed to create table")?;
+
+        log::info!("Created/verified table: {}", table_name);
+        Ok(())
+    }
+
+    async fn store_endpoint_data(&mut self, table_name: &str, data: &[serde_json::Value]) -> Result<usize> {
+        if data.is_empty() {
+            return Ok(0);
+        }
+
+        let mut stored_count = 0;
+
+        for item in data {
+            // Convert JSON to a generic record format
+            let record = self.json_to_generic_record(item)?;
+
+            // Create dynamic INSERT statement based on available fields
+            let field_names: Vec<String> = record.keys().cloned().collect();
+            let placeholders: Vec<String> = (1..=field_names.len())
+                .map(|i| format!("${}", i))
+                .collect();
+
+            let sql = format!(
+                "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT (id) DO UPDATE SET {}",
+                table_name,
+                field_names.join(", "),
+                placeholders.join(", "),
+                field_names.iter()
+                    .enumerate()
+                    .map(|(i, field)| format!("{} = ${}", field, i + 1))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            let mut query = sqlx::query(&sql);
+            for field in &field_names {
+                query = query.bind(record.get(field).unwrap());
+            }
+
+            match query.execute(&self.pool).await {
+                Ok(_) => {
+                    stored_count += 1;
+                }
+                Err(e) => {
+                    log::warn!("Failed to store item in table {}: {}", table_name, e);
+                    // Continue with other items rather than failing completely
+                }
+            }
+        }
+
+        log::debug!("Stored {} items in table {}", stored_count, table_name);
+        Ok(stored_count)
     }
 
     fn backend_name(&self) -> &'static str {

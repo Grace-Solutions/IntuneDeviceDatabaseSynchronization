@@ -24,6 +24,7 @@ pub struct AppConfig {
     #[serde(rename = "logLevel", default = "default_log_level")]
     pub log_level: String,
     pub database: DatabaseConfig,
+    pub endpoints: Option<crate::endpoint::EndpointsConfig>,
     pub backup: Option<crate::backup::BackupConfig>,
     pub webhook: Option<crate::webhook::WebhookConfig>,
     #[serde(rename = "rateLimit")]
@@ -121,6 +122,7 @@ impl AppConfig {
                     postgres: None,
                     mssql: None,
                 },
+                endpoints: None,
                 backup: None,
                 webhook: None,
                 rate_limit: None,
@@ -196,6 +198,16 @@ impl AppConfig {
         } else {
             parse_duration("1h") // Default fallback
         }
+    }
+
+    /// Get endpoints configuration with defaults if not specified
+    pub fn get_endpoints_config(&self) -> crate::endpoint::EndpointsConfig {
+        self.endpoints.clone().unwrap_or_else(|| {
+            // Default to just the devices endpoint for backward compatibility
+            crate::endpoint::EndpointsConfig {
+                endpoints: vec![crate::endpoint::PredefinedEndpoints::managed_devices()],
+            }
+        })
     }
 }
 

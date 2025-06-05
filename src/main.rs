@@ -8,6 +8,7 @@ mod auth;
 mod backup;
 mod config;
 mod config_validator;
+mod endpoint;
 mod filter;
 mod fingerprint;
 mod logging;

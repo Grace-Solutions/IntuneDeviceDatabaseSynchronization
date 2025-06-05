@@ -24,8 +24,14 @@ pub trait StorageBackend: Send + Sync {
     /// Initialize the storage backend (create tables, etc.)
     async fn initialize(&mut self) -> Result<()>;
 
+    /// Create a table if it doesn't exist with the given schema
+    async fn create_table_if_not_exists(&mut self, table_name: &str, schema: &str) -> Result<()>;
+
     /// Store or update a device
     async fn store_device(&mut self, device: &DeviceInfo) -> Result<StorageResult>;
+
+    /// Store generic endpoint data in a specified table
+    async fn store_endpoint_data(&mut self, table_name: &str, data: &[serde_json::Value]) -> Result<usize>;
 
     /// Store metadata for a device (extra fields not in main table)
     async fn store_device_metadata(
@@ -182,6 +188,62 @@ impl StorageManager {
         Ok(())
     }
     
+    /// Create table in all backends if it doesn't exist
+    pub async fn create_table_if_not_exists(&mut self, table_name: &str, schema: &str) -> Result<()> {
+        for backend in &mut self.backends {
+            backend.create_table_if_not_exists(table_name, schema).await
+                .map_err(|e| anyhow::anyhow!(
+                    "Failed to create table {} in {} backend: {}",
+                    table_name,
+                    backend.backend_name(),
+                    e
+                ))?;
+        }
+        Ok(())
+    }
+
+    /// Store endpoint data in all backends
+    pub async fn store_endpoint_data(&mut self, table_name: &str, data: &[serde_json::Value]) -> Result<usize> {
+        let mut total_stored = 0;
+
+        for backend in &mut self.backends {
+            match backend.store_endpoint_data(table_name, data).await {
+                Ok(count) => {
+                    log::debug!(
+                        "Stored {} items in table {} using {} backend",
+                        count,
+                        table_name,
+                        backend.backend_name()
+                    );
+                    total_stored = count; // Use the count from the last successful backend
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to store endpoint data in table {} using {} backend: {}",
+                        table_name,
+                        backend.backend_name(),
+                        e
+                    );
+                    crate::metrics::DB_ERROR_TOTAL.inc();
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(total_stored)
+    }
+
+    /// Get count from a specific table
+    pub async fn get_table_count(&mut self, _table_name: &str) -> Result<usize> {
+        if let Some(backend) = self.backends.first_mut() {
+            // For now, we'll use the device count method as a fallback
+            // Each backend implementation should override this for specific tables
+            backend.get_device_count().await
+        } else {
+            Ok(0)
+        }
+    }
+
     /// Get list of active backend names
     pub fn get_backend_names(&self) -> Vec<&'static str> {
         self.backends.iter().map(|b| b.backend_name()).collect()

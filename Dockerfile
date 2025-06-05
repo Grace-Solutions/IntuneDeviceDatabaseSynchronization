@@ -35,14 +35,21 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the binary from builder stage
-COPY --from=builder /app/target/release/intune-device-sync /usr/local/bin/intune-device-sync
+COPY --from=builder /app/target/release/IntuneDeviceDatabaseSynchronization /usr/local/bin/intune-device-sync
 
-# Create directories for logs and output
-RUN mkdir -p /app/logs /app/output && \
+# Create data directory for application files
+RUN mkdir -p /app/data/logs /app/data/backups && \
     chown -R appuser:appuser /app
 
-# Copy configuration files
-COPY config.json .env.example ./
+# Copy configuration template and startup script
+COPY config.json /app/config.json.template
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
+# Make startup script executable
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Create volume for persistent data
+VOLUME ["/app/data"]
 
 # Switch to app user
 USER appuser
@@ -54,5 +61,6 @@ EXPOSE 9898
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:9898/metrics || exit 1
 
-# Run the application
-CMD ["intune-device-sync", "run"]
+# Use startup script
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["run"]

@@ -5,6 +5,7 @@ A robust Microsoft Intune device synchronization service with advanced OS filter
 ## 🚀 Features
 
 - **🔄 Microsoft Intune Integration**: Sync device data from Microsoft Graph API with OAuth2 authentication
+- **🌐 Multi-Endpoint Support**: Sync multiple Microsoft Graph endpoints to separate tables (devices, users, groups, compliance policies)
 - **🎛️ Advanced OS Filtering**: Wildcard support with case-insensitive substring matching
 - **💾 Multi-Database Support**: SQLite, PostgreSQL, and MSSQL backends with automatic schema creation
 - **📊 Prometheus Metrics**: Comprehensive monitoring and observability
@@ -135,6 +136,7 @@ Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation.
 - [**Build Guide**](docs/BUILD.md) - Building from source and cross-platform compilation
 
 ### Advanced Features
+- [**Multi-Endpoint Support**](docs/ENDPOINTS.md) - Configure multiple Graph API endpoints with separate tables
 - [**Rate Limiting**](docs/RATE_LIMITING.md) - API rate limiting and retry logic configuration
 - [**Mock API**](docs/MOCK_API.md) - Testing with simulated Microsoft Graph API
 - [**Config Validation**](docs/CONFIG_VALIDATION.md) - Configuration validation and troubleshooting
@@ -143,13 +145,46 @@ Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation.
 
 ## 🐳 Docker
 
+### Quick Start
 ```bash
+# Build the image
 docker build -t intune-device-sync .
+
+# Run with data directory mount
 docker run -d \
-  -v $(pwd)/config.json:/app/config.json \
-  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/data:/app/data \
   -p 9898:9898 \
+  --name intune-sync \
   intune-device-sync
+
+# View logs
+docker logs intune-sync
+
+# Edit configuration
+# The config file will be created at ./data/config.json on first run
+# Edit it with your Azure credentials and restart the container
+```
+
+### Data Directory Structure
+The container uses a single data directory mount that contains:
+- `config.json` - Application configuration
+- `intune_devices.db` - SQLite database (if using SQLite backend)
+- `logs/` - Application logs
+- `backups/` - Database backups (if enabled)
+
+### Docker Compose Example
+```yaml
+version: '3.8'
+services:
+  intune-sync:
+    build: .
+    ports:
+      - "9898:9898"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
 ```
 
 ## � Development
