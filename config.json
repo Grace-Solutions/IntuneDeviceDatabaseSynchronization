@@ -11,12 +11,12 @@
   "database": {
     "backends": ["sqlite"],
     "tableName": "devices",
-    "sqlitePath": "./data/intune_devices.db",
+    "sqlitePath": "./data/MSGraph.db",
     "postgres": {
-      "connectionString": "postgres://user:password@localhost:5432/intune_devices"
+      "connectionString": "postgres://user:password@localhost:5432/msgraph_data"
     },
     "mssql": {
-      "connectionString": "server=localhost;database=intune_devices;trusted_connection=true"
+      "connectionString": "server=localhost;database=msgraph_data;trusted_connection=true"
     }
   },
   "endpoints": {
@@ -76,7 +76,7 @@
   "backup": {
     "enabled": true,
     "directory": "./data/backups",
-    "maxBackups": 10,
+    "maxBackups": 3,
     "scheduleEnabled": true,
     "scheduleInterval": "24h"
   },

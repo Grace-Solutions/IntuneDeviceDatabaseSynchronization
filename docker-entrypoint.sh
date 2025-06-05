@@ -12,4 +12,4 @@ if [ ! -f /app/data/config.json ]; then
 fi
 
 # Run the application with config from data directory
-exec intune-device-sync --config /app/data/config.json "$@"
+exec msgraph-db-sync --config /app/data/config.json "$@"

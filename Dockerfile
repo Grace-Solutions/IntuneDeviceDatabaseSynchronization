@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the binary from builder stage
-COPY --from=builder /app/target/release/IntuneDeviceDatabaseSynchronization /usr/local/bin/intune-device-sync
+COPY --from=builder /app/target/release/MSGraphDBSynchronizer /usr/local/bin/msgraph-db-sync
 
 # Create data directory for application files
 RUN mkdir -p /app/data/logs /app/data/backups && \

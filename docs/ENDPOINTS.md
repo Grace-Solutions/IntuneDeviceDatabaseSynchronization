@@ -212,7 +212,7 @@ Each endpoint is monitored separately with Prometheus metrics:
 Use the configuration validation command to check your endpoints configuration:
 
 ```bash
-IntuneDeviceDatabaseSynchronization validate --config config.json
+MSGraphDBSynchronizer validate --config config.json
 ```
 
 ### Logs
@@ -220,7 +220,7 @@ IntuneDeviceDatabaseSynchronization validate --config config.json
 Enable debug logging to see detailed endpoint processing:
 
 ```bash
-RUST_LOG=debug IntuneDeviceDatabaseSynchronization run
+RUST_LOG=debug MSGraphDBSynchronizer run
 ```
 
 ## Migration from Single Endpoint
@@ -251,7 +251,7 @@ If you're upgrading from a version that only supported devices:
   "pollInterval": "1h",
   "database": {
     "backends": ["sqlite"],
-    "sqlitePath": "./data/intune_data.db"
+    "sqlitePath": "./data/msgraph_data.db"
   },
   "endpoints": {
     "endpoints": [

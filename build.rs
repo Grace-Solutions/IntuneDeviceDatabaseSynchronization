@@ -20,10 +20,10 @@ fn main() {
         r#"
 pub const BUILD_VERSION: &str = "{}";
 pub const BUILD_TIMESTAMP: &str = "{}";
-pub const PRODUCT_NAME: &str = "IntuneDeviceDatabaseSynchronization";
-pub const COMPANY_NAME: &str = "Your Organization";
-pub const COPYRIGHT: &str = "Copyright © {} Your Organization";
-pub const DESCRIPTION: &str = "Microsoft Intune device synchronization service with OS filtering and multi-database support";
+pub const PRODUCT_NAME: &str = "MSGraphDBSynchronizer";
+pub const COMPANY_NAME: &str = "Grace Solutions";
+pub const COPYRIGHT: &str = "Copyright © {} Grace Solutions";
+pub const DESCRIPTION: &str = "Microsoft Graph API database synchronization service with multi-endpoint support";
 "#,
         version,
         now.format("%Y-%m-%d %H:%M:%S UTC"),
@@ -73,14 +73,14 @@ fn embed_windows_resources(version: &str, build_time: &DateTime<Utc>) {
     }
     
     // Set string version info
-    res.set("ProductName", "IntuneDeviceDatabaseSynchronization");
+    res.set("ProductName", "MSGraphDBSynchronizer");
     res.set("ProductVersion", version);
     res.set("FileVersion", version);
-    res.set("FileDescription", "Microsoft Intune device synchronization service with OS filtering and multi-database support");
-    res.set("CompanyName", "Your Organization");
-    res.set("LegalCopyright", &format!("Copyright © {} Your Organization", build_time.year()));
-    res.set("OriginalFilename", "IntuneDeviceDatabaseSynchronization.exe");
-    res.set("InternalName", "IntuneDeviceDatabaseSynchronization");
+    res.set("FileDescription", "Microsoft Graph API database synchronization service with multi-endpoint support");
+    res.set("CompanyName", "Grace Solutions");
+    res.set("LegalCopyright", &format!("Copyright © {} Grace Solutions", build_time.year()));
+    res.set("OriginalFilename", "MSGraphDBSynchronizer.exe");
+    res.set("InternalName", "MSGraphDBSynchronizer");
     
     // Compile the resource
     if let Err(e) = res.compile() {

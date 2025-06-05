@@ -1,6 +1,6 @@
-# IntuneDeviceDatabaseSynchronization
+# MSGraphDBSynchronizer
 
-A robust Microsoft Intune device synchronization service with advanced OS filtering, multi-database support, and comprehensive monitoring capabilities.
+A robust Microsoft Graph API database synchronization service with multi-endpoint support, advanced filtering, multi-database support, and comprehensive monitoring capabilities.
 
 ## 🚀 Features
 
@@ -26,15 +26,15 @@ A robust Microsoft Intune device synchronization service with advanced OS filter
 ### Download Pre-built Binaries (Recommended)
 
 1. **Download** the latest release for your platform:
-   - [**Windows**](https://github.com/Grace-Solutions/IntuneDeviceDatabaseSynchronization/releases/latest) - `*-windows-Release.zip`
-   - [**Linux**](https://github.com/Grace-Solutions/IntuneDeviceDatabaseSynchronization/releases/latest) - `*-linux-Release.zip`
-   - [**macOS**](https://github.com/Grace-Solutions/IntuneDeviceDatabaseSynchronization/releases/latest) - `*-macos-Release.zip`
+   - [**Windows**](https://github.com/Grace-Solutions/MSGraphDBSynchronizer/releases/latest) - `*-windows-Release.zip`
+   - [**Linux**](https://github.com/Grace-Solutions/MSGraphDBSynchronizer/releases/latest) - `*-linux-Release.zip`
+   - [**macOS**](https://github.com/Grace-Solutions/MSGraphDBSynchronizer/releases/latest) - `*-macos-Release.zip`
 
 2. **Extract** and configure:
    ```bash
    # Extract the package
-   unzip IntuneDeviceDatabaseSynchronization-*.zip
-   cd IntuneDeviceDatabaseSynchronization-*
+   unzip MSGraphDBSynchronizer-*.zip
+   cd MSGraphDBSynchronizer-*
 
    # Edit configuration with your Azure app details
    nano config.json  # or notepad config.json on Windows
@@ -43,10 +43,10 @@ A robust Microsoft Intune device synchronization service with advanced OS filter
 3. **Run** the service:
    ```bash
    # Windows
-   .\IntuneDeviceDatabaseSynchronization.exe run
+   .\MSGraphDBSynchronizer.exe run
 
    # Linux/macOS
-   ./IntuneDeviceDatabaseSynchronization run
+   ./MSGraphDBSynchronizer run
    ```
 
 ### Prerequisites
@@ -86,15 +86,15 @@ For detailed configuration options, see the [Configuration Guide](docs/CONFIGURA
 ### Windows Service
 ```bash
 # Install and manage Windows service
-IntuneDeviceDatabaseSynchronization.exe install
-IntuneDeviceDatabaseSynchronization.exe start
-IntuneDeviceDatabaseSynchronization.exe status
+MSGraphDBSynchronizer.exe install
+MSGraphDBSynchronizer.exe start
+MSGraphDBSynchronizer.exe status
 ```
 
 ### Linux/macOS
 ```bash
 # Run in foreground
-./IntuneDeviceDatabaseSynchronization run
+./MSGraphDBSynchronizer run
 
 # Or install as systemd/launchd service (see Installation Guide)
 ```
@@ -102,10 +102,10 @@ IntuneDeviceDatabaseSynchronization.exe status
 ### Configuration Validation
 ```bash
 # Validate configuration before running
-IntuneDeviceDatabaseSynchronization.exe validate
+MSGraphDBSynchronizer.exe validate
 
 # Validate specific config file
-IntuneDeviceDatabaseSynchronization.exe validate --config my-config.json
+MSGraphDBSynchronizer.exe validate --config my-config.json
 ```
 
 For detailed installation instructions, see the [Installation Guide](docs/INSTALLATION.md).
@@ -148,17 +148,17 @@ Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation.
 ### Quick Start
 ```bash
 # Build the image
-docker build -t intune-device-sync .
+docker build -t msgraph-db-sync .
 
 # Run with data directory mount
 docker run -d \
   -v $(pwd)/data:/app/data \
   -p 9898:9898 \
-  --name intune-sync \
-  intune-device-sync
+  --name msgraph-sync \
+  msgraph-db-sync
 
 # View logs
-docker logs intune-sync
+docker logs msgraph-sync
 
 # Edit configuration
 # The config file will be created at ./data/config.json on first run
@@ -168,7 +168,7 @@ docker logs intune-sync
 ### Data Directory Structure
 The container uses a single data directory mount that contains:
 - `config.json` - Application configuration
-- `intune_devices.db` - SQLite database (if using SQLite backend)
+- `msgraph_data.db` - SQLite database (if using SQLite backend)
 - `logs/` - Application logs
 - `backups/` - Database backups (if enabled)
 
@@ -176,7 +176,7 @@ The container uses a single data directory mount that contains:
 ```yaml
 version: '3.8'
 services:
-  intune-sync:
+  msgraph-sync:
     build: .
     ports:
       - "9898:9898"

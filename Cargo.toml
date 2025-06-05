@@ -1,14 +1,20 @@
 [package]
-name = "IntuneDeviceDatabaseSynchronization"
+name = "MSGraphDBSynchronizer"
 version = "1.0.0"
 edition = "2021"
-authors = ["Your Organization"]
-description = "Microsoft Intune device synchronization service with OS filtering and multi-database support"
+authors = ["Grace Solutions"]
+description = "Microsoft Graph API database synchronization service with multi-endpoint support"
 license = "GPL-3.0"
+repository = "https://github.com/Grace-Solutions/MSGraphDBSynchronizer"
+homepage = "https://github.com/Grace-Solutions/MSGraphDBSynchronizer"
+documentation = "https://github.com/Grace-Solutions/MSGraphDBSynchronizer/blob/main/README.md"
+readme = "README.md"
+keywords = ["microsoft", "graph", "database", "sync", "intune"]
+categories = ["command-line-utilities", "database"]
 build = "build.rs"
 
 [[bin]]
-name = "IntuneDeviceDatabaseSynchronization"
+name = "MSGraphDBSynchronizer"
 path = "src/main.rs"
 
 [dependencies]

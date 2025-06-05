@@ -34,6 +34,7 @@ impl AccessToken {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct AuthClient {
     config: AppConfig,
     client: Client,

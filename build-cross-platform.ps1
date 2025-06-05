@@ -34,7 +34,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Project information
-$ProjectName = "IntuneDeviceDatabaseSynchronization"
+$ProjectName = "MSGraphDBSynchronizer"
 $ProjectRoot = $PSScriptRoot
 
 # Target configurations

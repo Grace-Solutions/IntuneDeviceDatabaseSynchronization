@@ -26,8 +26,8 @@ use logging::setup_logging;
 use sync::SyncService;
 
 #[derive(Parser)]
-#[command(name = "IntuneDeviceDatabaseSynchronization")]
-#[command(about = "Microsoft Intune device synchronization service with OS filtering and multi-database support")]
+#[command(name = "MSGraphDBSynchronizer")]
+#[command(about = "Microsoft Graph API database synchronization service with multi-endpoint support")]
 #[command(version = version::get_version())]
 #[command(author = version::get_company_name())]
 struct Cli {

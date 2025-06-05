@@ -30,7 +30,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Project information
-$ProjectName = "IntuneDeviceDatabaseSynchronization"
+$ProjectName = "MSGraphDBSynchronizer"
 
 Write-Host "GitHub Release for $ProjectName" -ForegroundColor Green
 
@@ -233,7 +233,7 @@ For detailed installation and configuration instructions, see the included docum
         $ReleaseUrl = "$RepoUrl/releases/tag/$Version"
         Write-Host "Release URL: $ReleaseUrl" -ForegroundColor Cyan
     } else {
-        Write-Host "Release URL: https://github.com/Grace-Solutions/IntuneDeviceDatabaseSynchronization/releases/tag/$Version" -ForegroundColor Cyan
+        Write-Host "Release URL: https://github.com/Grace-Solutions/MSGraphDBSynchronizer/releases/tag/$Version" -ForegroundColor Cyan
     }
 
 } catch {
