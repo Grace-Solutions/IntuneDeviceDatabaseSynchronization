@@ -32,6 +32,9 @@ pub trait StorageBackend: Send + Sync {
 
     /// Get backend name for logging
     fn backend_name(&self) -> &'static str;
+
+    /// Clean up resources and close connections
+    async fn cleanup(&mut self) -> Result<()>;
 }
 
 /// Storage manager that handles multiple backends
@@ -146,5 +149,17 @@ impl StorageManager {
     /// Get list of active backend names
     pub fn get_backend_names(&self) -> Vec<&'static str> {
         self.backends.iter().map(|b| b.backend_name()).collect()
+    }
+
+    /// Clean up all storage backends
+    pub async fn cleanup(&mut self) -> Result<()> {
+        for backend in &mut self.backends {
+            if let Err(e) = backend.cleanup().await {
+                log::warn!("Failed to cleanup backend {}: {}", backend.backend_name(), e);
+            } else {
+                log::info!("Successfully cleaned up backend: {}", backend.backend_name());
+            }
+        }
+        Ok(())
     }
 }

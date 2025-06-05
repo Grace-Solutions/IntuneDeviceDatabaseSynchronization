@@ -32,17 +32,27 @@ pub struct SyncService {
 
 impl SyncService {
     pub async fn new(config: AppConfig) -> Result<Self> {
+        log::debug!("Creating auth client");
         let auth_client = AuthClient::new(config.clone());
+        log::debug!("Creating storage manager");
         let mut storage = StorageManager::new(&config.database).await?;
+        log::debug!("Initializing storage");
         storage.initialize().await?;
+        log::debug!("Storage initialized");
 
+        log::debug!("Creating OS filter");
         let os_filter = DeviceOsFilter::new(&config.device_os_filter);
 
         // Get endpoints configuration
+        log::debug!("Getting endpoints configuration");
         let endpoints_config = config.get_endpoints_config();
+        log::debug!("Validating endpoints configuration");
         endpoints_config.validate().context("Invalid endpoints configuration")?;
+        log::debug!("Endpoints configuration validated");
 
-        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone());
+        log::debug!("Creating endpoint manager");
+        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), config.mock_graph_api.clone());
+        log::debug!("Endpoint manager created");
 
         info!("Sync service initialized with backends: {:?}", storage.get_backend_names());
         info!("OS filter configured: {:?}", os_filter.get_filters());
@@ -241,6 +251,19 @@ impl SyncService {
         metrics::DEVICES_PROCESSED_TOTAL.inc();
         Ok(stored_count > 0)
     }
+
+    /// Clean up resources
+    pub async fn cleanup(&mut self) -> Result<()> {
+        info!("Cleaning up sync service resources...");
+
+        // Clean up storage backends
+        if let Err(e) = self.storage.cleanup().await {
+            error!("Failed to cleanup storage backends: {}", e);
+        }
+
+        info!("Sync service cleanup completed");
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -280,7 +303,7 @@ mod tests {
         storage_manager.initialize().await.unwrap();
 
         let endpoints_config = config.get_endpoints_config();
-        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone());
+        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), None);
 
         let sync_service = SyncService {
             config: config.clone(),

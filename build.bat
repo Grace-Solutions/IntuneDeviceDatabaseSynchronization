@@ -2,7 +2,7 @@
 REM Wrapper script for build.ps1
 REM This allows easy execution without needing to change PowerShell execution policy
 
-echo Building IntuneDeviceDatabaseSynchronization...
+echo Building MSGraphDBSynchronizer...
 powershell.exe -ExecutionPolicy Bypass -File "%~dp0build.ps1" %*
 
 if %ERRORLEVEL% neq 0 (

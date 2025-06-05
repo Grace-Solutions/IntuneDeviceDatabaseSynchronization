@@ -6,26 +6,33 @@ use log::LevelFilter;
 use std::io::{self, Write};
 
 use crate::config::AppConfig;
+use crate::path_utils;
 
-/// Custom log format: 2025/06/02 23:58:36.434 - [ProcessID] - [ThreadID] - [Level] - [Component] - Message
+/// Custom log format: 2025/06/02 23:58:36.434 - [ProcessID:ThreadID] - [Level] - [Component] - Message
 pub fn custom_format(
     w: &mut dyn Write,
     now: &mut DeferredNow,
     record: &Record,
 ) -> Result<(), io::Error> {
     let process_id = std::process::id();
-    let thread_id = format!("{:?}", std::thread::current().id());
-    
+
+    // Extract just the thread number from ThreadId
+    let thread_id_str = format!("{:?}", std::thread::current().id());
+    let thread_id = thread_id_str
+        .strip_prefix("ThreadId(")
+        .and_then(|s| s.strip_suffix(")"))
+        .unwrap_or("0");
+
     // Extract component from target or use module path
     let component = if record.target().is_empty() {
         record.module_path().unwrap_or("unknown")
     } else {
         record.target()
     };
-    
+
     write!(
         w,
-        "{} - [{}] - [{}] - [{}] - [{}] - {}",
+        "{} - [{}:{}] - [{}] - [{}] - {}",
         now.format("%Y/%m/%d %H:%M:%S%.3f"),
         process_id,
         thread_id,
@@ -36,14 +43,20 @@ pub fn custom_format(
 }
 
 /// Sets up structured logging with rotation
-pub fn setup_logging(_config: &AppConfig) -> Result<()> {
+pub async fn setup_logging(_config: &AppConfig) -> Result<()> {
     let log_level = determine_log_level();
-    
+
+    // Determine logs directory - default to "logs" next to executable
+    let logs_dir = path_utils::resolve_logs_path("logs")?;
+
+    // Ensure logs directory exists
+    path_utils::ensure_directory_exists(&logs_dir).await?;
+
     let _logger = Logger::try_with_str(&log_level)?
         .log_to_file(
             FileSpec::default()
-                .directory("logs")
-                .basename("intune-device-sync")
+                .directory(&logs_dir)
+                .basename("MSGraphDBSynchronizer")
                 .suffix("log")
         )
         .rotate(
@@ -58,10 +71,10 @@ pub fn setup_logging(_config: &AppConfig) -> Result<()> {
 
     // Set global logger
     log::set_max_level(parse_log_level(&log_level));
-    
+
     log::info!("Logging initialized with level: {}", log_level);
-    log::info!("Log files will be written to: logs/");
-    
+    log::info!("Log files will be written to: {}", logs_dir.display());
+
     Ok(())
 }
 

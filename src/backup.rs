@@ -45,11 +45,13 @@ pub enum BackupType {
     PreUpdate,
 }
 
+#[allow(dead_code)]
 pub struct SqliteBackupManager {
     backup_dir: PathBuf,
     max_backups: usize,
 }
 
+#[allow(dead_code)]
 impl SqliteBackupManager {
     pub fn new<P: AsRef<Path>>(backup_dir: P, max_backups: usize) -> Result<Self> {
         let backup_dir = backup_dir.as_ref().to_path_buf();
@@ -246,6 +248,7 @@ impl SqliteBackupManager {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct BackupStats {
     pub total_count: usize,
     pub total_size: u64,
@@ -253,6 +256,7 @@ pub struct BackupStats {
     pub newest_backup: Option<DateTime<Utc>>,
 }
 
+#[allow(dead_code)]
 impl BackupStats {
     pub fn total_size_mb(&self) -> f64 {
         self.total_size as f64 / (1024.0 * 1024.0)

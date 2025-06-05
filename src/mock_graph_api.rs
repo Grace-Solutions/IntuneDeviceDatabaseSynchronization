@@ -109,6 +109,7 @@ pub struct MockGraphResponse {
     pub odata_next_link: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct MockGraphApi {
     config: MockGraphApiConfig,
     devices: Arc<RwLock<HashMap<String, MockDevice>>>,

@@ -4,6 +4,7 @@ use log::{info, debug};
 use std::collections::HashMap;
 use reqwest::Client;
 use crate::auth::AuthClient;
+use crate::mock_graph_api::MockGraphApi;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointConfig {
@@ -124,15 +125,19 @@ pub struct EndpointManager {
     config: EndpointsConfig,
     auth_client: AuthClient,
     http_client: Client,
+    mock_api: Option<MockGraphApi>,
 }
 
 impl EndpointManager {
-    pub fn new(config: EndpointsConfig, auth_client: AuthClient) -> Self {
+    pub fn new(config: EndpointsConfig, auth_client: AuthClient, mock_api_config: Option<crate::mock_graph_api::MockGraphApiConfig>) -> Self {
         let http_client = Client::new();
+        let mock_api = mock_api_config.map(|config| MockGraphApi::new(config));
+
         Self {
             config,
             auth_client,
             http_client,
+            mock_api,
         }
     }
 
@@ -145,7 +150,16 @@ impl EndpointManager {
     pub async fn fetch_endpoint_data(&self, endpoint: &EndpointConfig) -> Result<serde_json::Value> {
         info!("Fetching data from endpoint: {} ({})", endpoint.name, endpoint.endpoint_url);
 
-        // Get access token
+        // Check if mock API is enabled and handle devices endpoint
+        if let Some(ref mock_api) = self.mock_api {
+            if mock_api.is_enabled() && endpoint.name == "devices" {
+                info!("Using mock API for devices endpoint");
+                let mock_response = mock_api.get_managed_devices(None, None).await?;
+                return Ok(serde_json::to_value(mock_response)?);
+            }
+        }
+
+        // Get access token for real API
         let token = self.auth_client.get_access_token().await
             .context("Failed to get access token")?;
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Automated build script for IntuneDeviceDatabaseSynchronization with version management
+    Automated build script for MSGraphDBSynchronizer with version management
 .DESCRIPTION
     This script automatically builds the project with timestamp-based versioning,
     embeds the icon and version information, and creates release artifacts.

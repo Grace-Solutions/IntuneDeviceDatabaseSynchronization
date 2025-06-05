@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Cross-platform build script for IntuneDeviceDatabaseSynchronization
+    Cross-platform build script for MSGraphDBSynchronizer
 .DESCRIPTION
     This script builds binaries for Windows, Linux, and macOS with automatic versioning
     and creates distribution packages for each platform.

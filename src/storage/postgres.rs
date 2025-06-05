@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
+use std::collections::{HashMap, HashSet};
+use chrono::{TimeZone, Utc};
 
 use super::StorageBackend;
+use crate::path_utils;
 
 pub struct PostgresBackend {
     pool: PgPool,
@@ -82,7 +85,14 @@ impl PostgresBackend {
                     serde_json::Value::Null => "".to_string(),
                     serde_json::Value::Bool(b) => b.to_string(),
                     serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::String(s) => {
+                        // Check if this looks like a timestamp and normalize it
+                        if self.is_timestamp_string(s) {
+                            self.normalize_timestamp_value(s)
+                        } else {
+                            s.clone()
+                        }
+                    },
                     serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
                         // Store complex types as JSON strings
                         value.to_string()
@@ -167,6 +177,122 @@ impl PostgresBackend {
         Ok(())
     }
 
+    /// Check if a string looks like a timestamp
+    fn is_timestamp_string(&self, s: &str) -> bool {
+        // Check for common timestamp patterns
+        s.contains('T') && (s.contains('Z') || s.contains('+') || s.contains('-')) ||
+        s.ends_with("DateTime") ||
+        s.contains("Date") ||
+        chrono::DateTime::parse_from_rfc3339(s).is_ok()
+    }
+
+    /// Parse and normalize timestamp values
+    fn normalize_timestamp_value(&self, value: &str) -> String {
+        // Try to parse as RFC3339 first
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+            return dt.with_timezone(&Utc).to_rfc3339();
+        }
+
+        // Try other common formats
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
+            return Utc.from_utc_datetime(&dt).to_rfc3339();
+        }
+
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
+            return Utc.from_utc_datetime(&dt).to_rfc3339();
+        }
+
+        // If parsing fails, return the original value
+        value.to_string()
+    }
+
+    /// Determine the appropriate PostgreSQL column type for a JSON value
+    fn determine_column_type(&self, value: Option<&serde_json::Value>) -> &'static str {
+        match value {
+            Some(serde_json::Value::Bool(_)) => "BOOLEAN",
+            Some(serde_json::Value::Number(n)) => {
+                if n.is_i64() || n.is_u64() {
+                    "BIGINT"
+                } else {
+                    "DOUBLE PRECISION"
+                }
+            }
+            Some(serde_json::Value::String(s)) => {
+                // Check if the string looks like a timestamp/date
+                if self.is_timestamp_string(s) {
+                    "TIMESTAMPTZ" // Store timestamps with timezone
+                } else {
+                    "TEXT"
+                }
+            }
+            Some(serde_json::Value::Array(_)) | Some(serde_json::Value::Object(_)) => "JSONB", // Store as JSONB
+            Some(serde_json::Value::Null) | None => "TEXT", // Default to TEXT for unknown/null values
+        }
+    }
+
+    /// Get existing table columns
+    async fn get_table_columns(&self, table_name: &str) -> Result<HashSet<String>> {
+        let rows = sqlx::query(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = $1"
+        )
+        .bind(table_name)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut columns = HashSet::new();
+        for row in rows {
+            let column_name: String = row.get("column_name");
+            columns.insert(column_name);
+        }
+
+        Ok(columns)
+    }
+
+    /// Ensure the table schema matches the data structure by analyzing the JSON object
+    async fn ensure_table_schema_matches(&mut self, table_name: &str, sample_data: &serde_json::Value) -> Result<()> {
+        if let Some(obj) = sample_data.as_object() {
+            // Get current table schema
+            let existing_columns = self.get_table_columns(table_name).await?;
+
+            // Determine required columns from the sample data
+            let mut required_columns = HashSet::new();
+            for key in obj.keys() {
+                required_columns.insert(key.clone());
+            }
+
+            // Add standard columns
+            required_columns.insert("id".to_string());
+            required_columns.insert("last_sync_date_time".to_string());
+
+            // Find missing columns
+            let missing_columns: Vec<String> = required_columns
+                .difference(&existing_columns)
+                .cloned()
+                .collect();
+
+            // Add missing columns
+            for column in missing_columns {
+                let column_type = self.determine_column_type(obj.get(&column));
+                let alter_sql = format!(
+                    "ALTER TABLE {} ADD COLUMN {} {}",
+                    table_name, column, column_type
+                );
+
+                match sqlx::query(&alter_sql).execute(&self.pool).await {
+                    Ok(_) => {
+                        log::info!("Added column {} to table {}", column, table_name);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to add column {} to table {}: {}", column, table_name, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
     fn parse_timestamp(timestamp_str: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
         timestamp_str.and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -201,6 +327,14 @@ impl StorageBackend for PostgresBackend {
     async fn store_endpoint_data(&mut self, table_name: &str, data: &[serde_json::Value]) -> Result<usize> {
         if data.is_empty() {
             return Ok(0);
+        }
+
+        // Ensure table schema matches the data structure using the first item as a sample
+        if let Some(first_item) = data.first() {
+            if let Err(e) = self.ensure_table_schema_matches(table_name, first_item).await {
+                log::warn!("Failed to update table schema for {}: {}", table_name, e);
+                // Continue anyway - might work with existing schema
+            }
         }
 
         let mut stored_count = 0;
@@ -249,6 +383,13 @@ impl StorageBackend for PostgresBackend {
 
     fn backend_name(&self) -> &'static str {
         "PostgreSQL"
+    }
+
+    async fn cleanup(&mut self) -> Result<()> {
+        // Close the connection pool
+        self.pool.close().await;
+        log::info!("Cleaned up PostgreSQL backend - connection pool closed");
+        Ok(())
     }
 }
 

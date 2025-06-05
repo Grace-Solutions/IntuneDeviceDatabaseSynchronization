@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use log::{error, info};
 use std::process;
+use std::path::{Path, PathBuf};
 use tokio::signal;
 
 mod auth;
@@ -14,6 +15,7 @@ mod fingerprint;
 mod logging;
 mod metrics;
 mod mock_graph_api;
+mod path_utils;
 mod rate_limiter;
 mod storage;
 mod sync;
@@ -220,21 +222,28 @@ async fn show_status() -> Result<()> {
 
 async fn run_service() -> Result<()> {
     // Load configuration
+    println!("Loading configuration...");
     let config = AppConfig::load().await?;
-    
+    println!("Configuration loaded");
+
     // Setup logging
-    setup_logging(&config)?;
-    
+    println!("Setting up logging...");
+    setup_logging(&config).await?;
+    println!("Logging setup complete");
+
     info!("Starting {} v{}", version::get_product_name(), version::get_version());
-    
+
     // Initialize metrics if enabled
     if config.enable_prometheus {
+        info!("Initializing Prometheus metrics");
         metrics::init_metrics();
         tokio::spawn(metrics::start_metrics_server(config.prometheus_port));
     }
-    
+
     // Create and start sync service
+    info!("Creating sync service");
     let mut sync_service = SyncService::new(config).await?;
+    info!("Sync service created");
     
     // Setup graceful shutdown
     let shutdown_signal = async {
@@ -254,6 +263,12 @@ async fn run_service() -> Result<()> {
             info!("Shutting down gracefully");
         }
     }
-    
+
+    // Clean up resources
+    info!("Cleaning up resources...");
+    if let Err(e) = sync_service.cleanup().await {
+        error!("Error during cleanup: {}", e);
+    }
+
     Ok(())
 }

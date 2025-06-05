@@ -7,7 +7,7 @@
   "deviceOsFilter": ["Windows", "macOS", "Android", "iOS"],
   "enablePrometheus": true,
   "prometheusPort": 9898,
-  "logLevel": "info",
+  "logLevel": "debug",
   "database": {
     "sqlite": {
       "enabled": true,
@@ -112,8 +112,8 @@
     "enableJitter": true
   },
   "mockGraphApi": {
-    "enabled": false,
-    "deviceCount": 100,
+    "enabled": true,
+    "deviceCount": 50,
     "simulateRateLimits": false,
     "rateLimitProbability": 0.1,
     "simulateAuthFailures": false,

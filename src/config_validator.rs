@@ -519,15 +519,8 @@ impl ConfigValidator {
                 "Using privileged port (< 1024) for Prometheus metrics".to_string(),
                 "Consider using a port >= 1024".to_string(),
             );
-        } else if config.prometheus_port > 65535 {
-            self.add_error(
-                "prometheusPort".to_string(),
-                ValidationErrorType::InvalidRange,
-                "Port number must be between 1 and 65535".to_string(),
-                Some(config.prometheus_port.to_string()),
-                Some("9898".to_string()),
-            );
         }
+        // Note: u16 max value is 65535, so no need to check upper bound
 
         // Log level validation
         let valid_log_levels = vec!["trace", "debug", "info", "warn", "error"];
@@ -847,6 +840,7 @@ fn is_valid_mssql_connection_string(s: &str) -> bool {
     s.contains("server=") || s.contains("Server=") || s.contains("data source=") || s.contains("Data Source=")
 }
 
+#[allow(dead_code)]
 fn is_valid_table_name(s: &str) -> bool {
     let re = Regex::new(r"^[a-zA-Z_][a-zA-Z0-9_]*$").unwrap();
     re.is_match(s)

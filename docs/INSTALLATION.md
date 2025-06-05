@@ -41,19 +41,19 @@
 ### Method 1: Download Pre-built Binaries (Recommended)
 
 1. **Download the latest release**:
-   - Go to the [Releases page](https://github.com/your-org/IntuneDeviceDatabaseSynchronization/releases)
+   - Go to the [Releases page](https://github.com/Grace-Solutions/MSGraphDBSynchronizer/releases)
    - Download the appropriate package for your platform:
-     - Windows: `IntuneDeviceDatabaseSynchronization-VERSION-windows-Release.zip`
-     - Linux: `IntuneDeviceDatabaseSynchronization-VERSION-linux-Release.zip`
-     - macOS: `IntuneDeviceDatabaseSynchronization-VERSION-macos-Release.zip`
+     - Windows: `MSGraphDBSynchronizer-VERSION-windows-Release.zip`
+     - Linux: `MSGraphDBSynchronizer-VERSION-linux-Release.zip`
+     - macOS: `MSGraphDBSynchronizer-VERSION-macos-Release.zip`
 
 2. **Extract the package**:
    ```bash
    # Windows (PowerShell)
-   Expand-Archive -Path "IntuneDeviceDatabaseSynchronization-*.zip" -DestinationPath "C:\IntuneDeviceSync"
-   
+   Expand-Archive -Path "MSGraphDBSynchronizer-*.zip" -DestinationPath "C:\MSGraphDBSynchronizer"
+
    # Linux/macOS
-   unzip IntuneDeviceDatabaseSynchronization-*.zip -d /opt/intune-device-sync
+   unzip MSGraphDBSynchronizer-*.zip -d /opt/msgraph-db-synchronizer
    ```
 
 3. **Configure the application**:
@@ -73,32 +73,32 @@ See [Build Guide](BUILD.md) for detailed build instructions.
 1. **Extract to Program Files**:
    ```powershell
    # Run as Administrator
-   Expand-Archive -Path "IntuneDeviceDatabaseSynchronization-*.zip" -DestinationPath "C:\Program Files\IntuneDeviceSync"
-   cd "C:\Program Files\IntuneDeviceSync"
+   Expand-Archive -Path "MSGraphDBSynchronizer-*.zip" -DestinationPath "C:\Program Files\MSGraphDBSynchronizer"
+   cd "C:\Program Files\MSGraphDBSynchronizer"
    ```
 
 2. **Install the service**:
    ```powershell
    # Run as Administrator
-   .\IntuneDeviceDatabaseSynchronization.exe install
+   .\MSGraphDBSynchronizer.exe install
    ```
 
 3. **Start the service**:
    ```powershell
-   .\IntuneDeviceDatabaseSynchronization.exe start
+   .\MSGraphDBSynchronizer.exe start
    ```
 
 #### As a Console Application
 
 1. **Extract to desired location**:
    ```powershell
-   Expand-Archive -Path "IntuneDeviceDatabaseSynchronization-*.zip" -DestinationPath "C:\IntuneDeviceSync"
-   cd "C:\IntuneDeviceSync"
+   Expand-Archive -Path "MSGraphDBSynchronizer-*.zip" -DestinationPath "C:\MSGraphDBSynchronizer"
+   cd "C:\MSGraphDBSynchronizer"
    ```
 
 2. **Run in foreground**:
    ```powershell
-   .\IntuneDeviceDatabaseSynchronization.exe run
+   .\MSGraphDBSynchronizer.exe run
    ```
 
 ### Linux
@@ -107,26 +107,26 @@ See [Build Guide](BUILD.md) for detailed build instructions.
 
 1. **Extract and install**:
    ```bash
-   sudo unzip IntuneDeviceDatabaseSynchronization-*.zip -d /opt/intune-device-sync
-   sudo chmod +x /opt/intune-device-sync/IntuneDeviceDatabaseSynchronization
+   sudo unzip MSGraphDBSynchronizer-*.zip -d /opt/msgraph-db-synchronizer
+   sudo chmod +x /opt/msgraph-db-synchronizer/MSGraphDBSynchronizer
    ```
 
 2. **Create systemd service**:
    ```bash
-   sudo tee /etc/systemd/system/intune-device-sync.service > /dev/null <<EOF
+   sudo tee /etc/systemd/system/msgraph-db-synchronizer.service > /dev/null <<EOF
    [Unit]
-   Description=Intune Device Database Synchronization Service
+   Description=Microsoft Graph Database Synchronizer Service
    After=network.target
-   
+
    [Service]
    Type=simple
-   User=intune-sync
-   Group=intune-sync
-   WorkingDirectory=/opt/intune-device-sync
-   ExecStart=/opt/intune-device-sync/IntuneDeviceDatabaseSynchronization run
+   User=msgraph-sync
+   Group=msgraph-sync
+   WorkingDirectory=/opt/msgraph-db-synchronizer
+   ExecStart=/opt/msgraph-db-synchronizer/MSGraphDBSynchronizer run
    Restart=always
    RestartSec=10
-   
+
    [Install]
    WantedBy=multi-user.target
    EOF
@@ -134,22 +134,22 @@ See [Build Guide](BUILD.md) for detailed build instructions.
 
 3. **Create service user**:
    ```bash
-   sudo useradd -r -s /bin/false intune-sync
-   sudo chown -R intune-sync:intune-sync /opt/intune-device-sync
+   sudo useradd -r -s /bin/false msgraph-sync
+   sudo chown -R msgraph-sync:msgraph-sync /opt/msgraph-db-synchronizer
    ```
 
 4. **Enable and start service**:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable intune-device-sync
-   sudo systemctl start intune-device-sync
+   sudo systemctl enable msgraph-db-synchronizer
+   sudo systemctl start msgraph-db-synchronizer
    ```
 
 #### Manual Execution
 
 ```bash
-cd /opt/intune-device-sync
-./IntuneDeviceDatabaseSynchronization run
+cd /opt/msgraph-db-synchronizer
+./MSGraphDBSynchronizer run
 ```
 
 ### macOS
@@ -158,8 +158,8 @@ cd /opt/intune-device-sync
 
 1. **Extract and install**:
    ```bash
-   sudo unzip IntuneDeviceDatabaseSynchronization-*.zip -d /opt/intune-device-sync
-   sudo chmod +x /opt/intune-device-sync/IntuneDeviceDatabaseSynchronization
+   sudo unzip MSGraphDBSynchronizer-*.zip -d /opt/msgraph-db-synchronizer
+   sudo chmod +x /opt/msgraph-db-synchronizer/MSGraphDBSynchronizer
    ```
 
 2. **Create launch daemon**:
@@ -198,13 +198,13 @@ cd /opt/intune-device-sync
 1. **Check service status**:
    ```bash
    # Windows
-   IntuneDeviceDatabaseSynchronization.exe status
-   
+   MSGraphDBSynchronizer.exe status
+
    # Linux
-   sudo systemctl status intune-device-sync
-   
+   sudo systemctl status msgraph-db-synchronizer
+
    # macOS
-   sudo launchctl list | grep intune-device-sync
+   sudo launchctl list | grep msgraph-db-synchronizer
    ```
 
 2. **Check logs**:

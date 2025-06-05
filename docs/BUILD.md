@@ -89,8 +89,8 @@ The project includes automated build scripts that handle cross-platform compilat
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/IntuneDeviceDatabaseSynchronization.git
-cd IntuneDeviceDatabaseSynchronization
+git clone https://github.com/Grace-Solutions/MSGraphDBSynchronizer.git
+cd MSGraphDBSynchronizer
 
 # Build for current platform
 cargo build --release
@@ -138,26 +138,26 @@ After building, the following structure is created:
 ```
 dist/
 ├── windows/
-│   ├── IntuneDeviceDatabaseSynchronization.exe
+│   ├── MSGraphDBSynchronizer.exe
 │   ├── version.json
 │   ├── config.json
 │   ├── README.md
 │   └── docs/
 ├── linux/
-│   ├── IntuneDeviceDatabaseSynchronization
+│   ├── MSGraphDBSynchronizer
 │   ├── version.json
 │   ├── config.json
 │   ├── README.md
 │   └── docs/
 ├── macos/
-│   ├── IntuneDeviceDatabaseSynchronization
+│   ├── MSGraphDBSynchronizer
 │   ├── version.json
 │   ├── config.json
 │   ├── README.md
 │   └── docs/
-├── IntuneDeviceDatabaseSynchronization-VERSION-windows-Release.zip
-├── IntuneDeviceDatabaseSynchronization-VERSION-linux-Release.zip
-└── IntuneDeviceDatabaseSynchronization-VERSION-macos-Release.zip
+├── MSGraphDBSynchronizer-VERSION-windows-Release.zip
+├── MSGraphDBSynchronizer-VERSION-linux-Release.zip
+└── MSGraphDBSynchronizer-VERSION-macos-Release.zip
 ```
 
 ### Version Information
@@ -333,7 +333,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ matrix.os }}-binary
-        path: target/release/IntuneDeviceDatabaseSynchronization*
+        path: target/release/MSGraphDBSynchronizer*
 ```
 
 For complete CI/CD setup, see the `.github/workflows/` directory in the repository.

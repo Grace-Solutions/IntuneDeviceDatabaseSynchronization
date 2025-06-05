@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
+use crate::path_utils;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -87,9 +88,10 @@ fn default_log_level() -> String {
 }
 
 fn default_sqlite_path() -> String {
-    "./output/devices.db".to_string()
+    "./data/msgraph_data.db".to_string()
 }
 
+#[allow(dead_code)]
 fn default_table_name() -> String {
     "devices".to_string()
 }
@@ -99,8 +101,18 @@ impl AppConfig {
         // Load from environment variables first
         dotenvy::dotenv().ok();
 
-        // Try to load from config.json
-        let mut config = if Path::new("config.json").exists() {
+        // Try to load config from next to executable first, then current directory
+        let config_path = path_utils::get_default_config_path()
+            .unwrap_or_else(|_| std::path::PathBuf::from("config.json"));
+
+        let mut config = if config_path.exists() {
+            let config_content = tokio::fs::read_to_string(&config_path)
+                .await
+                .with_context(|| format!("Failed to read config file: {}", config_path.display()))?;
+            serde_json::from_str::<AppConfig>(&config_content)
+                .with_context(|| format!("Failed to parse config file: {}", config_path.display()))?
+        } else if Path::new("config.json").exists() {
+            // Fallback to current directory for backward compatibility
             let config_content = tokio::fs::read_to_string("config.json")
                 .await
                 .context("Failed to read config.json")?;

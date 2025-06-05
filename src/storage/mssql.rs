@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use tiberius::{Client, Config};
+use tiberius::{Client, Config, Row};
 use tokio::net::TcpStream;
 use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
+use std::collections::{HashMap, HashSet};
+use chrono::{TimeZone, Utc};
 
 use super::StorageBackend;
 
@@ -97,7 +99,14 @@ impl MssqlBackend {
                     serde_json::Value::Null => "".to_string(),
                     serde_json::Value::Bool(b) => b.to_string(),
                     serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::String(s) => {
+                        // Check if this looks like a timestamp and normalize it
+                        if self.is_timestamp_string(s) {
+                            self.normalize_timestamp_value(s)
+                        } else {
+                            s.clone()
+                        }
+                    },
                     serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
                         // Store complex types as JSON strings
                         value.to_string()
@@ -127,6 +136,124 @@ impl MssqlBackend {
         Ok(())
     }
 
+    /// Check if a string looks like a timestamp
+    fn is_timestamp_string(&self, s: &str) -> bool {
+        // Check for common timestamp patterns
+        s.contains('T') && (s.contains('Z') || s.contains('+') || s.contains('-')) ||
+        s.ends_with("DateTime") ||
+        s.contains("Date") ||
+        chrono::DateTime::parse_from_rfc3339(s).is_ok()
+    }
+
+    /// Parse and normalize timestamp values
+    fn normalize_timestamp_value(&self, value: &str) -> String {
+        // Try to parse as RFC3339 first
+        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+            return dt.with_timezone(&Utc).to_rfc3339();
+        }
+
+        // Try other common formats
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
+            return Utc.from_utc_datetime(&dt).to_rfc3339();
+        }
+
+        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
+            return Utc.from_utc_datetime(&dt).to_rfc3339();
+        }
+
+        // If parsing fails, return the original value
+        value.to_string()
+    }
+
+    /// Determine the appropriate MSSQL column type for a JSON value
+    fn determine_column_type(&self, value: Option<&serde_json::Value>) -> &'static str {
+        match value {
+            Some(serde_json::Value::Bool(_)) => "BIT",
+            Some(serde_json::Value::Number(n)) => {
+                if n.is_i64() || n.is_u64() {
+                    "BIGINT"
+                } else {
+                    "FLOAT"
+                }
+            }
+            Some(serde_json::Value::String(s)) => {
+                // Check if the string looks like a timestamp/date
+                if self.is_timestamp_string(s) {
+                    "DATETIME2" // Store timestamps with high precision
+                } else {
+                    "NVARCHAR(MAX)"
+                }
+            }
+            Some(serde_json::Value::Array(_)) | Some(serde_json::Value::Object(_)) => "NVARCHAR(MAX)", // Store as JSON string
+            Some(serde_json::Value::Null) | None => "NVARCHAR(MAX)", // Default to NVARCHAR for unknown/null values
+        }
+    }
+
+    /// Get existing table columns
+    async fn get_table_columns(&mut self, table_name: &str) -> Result<HashSet<String>> {
+        let query = format!(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = '{}'",
+            table_name
+        );
+
+        let stream = self.client.simple_query(&query).await?;
+        let rows = stream.into_first_result().await?;
+
+        let mut columns = HashSet::new();
+        for row in rows {
+            if let Some(column_name) = row.get::<&str, _>(0) {
+                columns.insert(column_name.to_string());
+            }
+        }
+
+        Ok(columns)
+    }
+
+    /// Ensure the table schema matches the data structure by analyzing the JSON object
+    async fn ensure_table_schema_matches(&mut self, table_name: &str, sample_data: &serde_json::Value) -> Result<()> {
+        if let Some(obj) = sample_data.as_object() {
+            // Get current table schema
+            let existing_columns = self.get_table_columns(table_name).await?;
+
+            // Determine required columns from the sample data
+            let mut required_columns = HashSet::new();
+            for key in obj.keys() {
+                required_columns.insert(key.clone());
+            }
+
+            // Add standard columns
+            required_columns.insert("id".to_string());
+            required_columns.insert("last_sync_date_time".to_string());
+
+            // Find missing columns
+            let missing_columns: Vec<String> = required_columns
+                .difference(&existing_columns)
+                .cloned()
+                .collect();
+
+            // Add missing columns
+            for column in missing_columns {
+                let column_type = self.determine_column_type(obj.get(&column));
+                let alter_sql = format!(
+                    "ALTER TABLE {} ADD {} {}",
+                    table_name, column, column_type
+                );
+
+                match self.client.simple_query(&alter_sql).await {
+                    Ok(_) => {
+                        log::info!("Added column {} to table {}", column, table_name);
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to add column {} to table {}: {}", column, table_name, e);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[allow(dead_code)]
     fn parse_timestamp(timestamp_str: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
         timestamp_str.and_then(|s| {
             chrono::DateTime::parse_from_rfc3339(s)
@@ -162,6 +289,14 @@ impl StorageBackend for MssqlBackend {
     async fn store_endpoint_data(&mut self, table_name: &str, data: &[serde_json::Value]) -> Result<usize> {
         if data.is_empty() {
             return Ok(0);
+        }
+
+        // Ensure table schema matches the data structure using the first item as a sample
+        if let Some(first_item) = data.first() {
+            if let Err(e) = self.ensure_table_schema_matches(table_name, first_item).await {
+                log::warn!("Failed to update table schema for {}: {}", table_name, e);
+                // Continue anyway - might work with existing schema
+            }
         }
 
         let mut stored_count = 0;
@@ -207,6 +342,13 @@ impl StorageBackend for MssqlBackend {
 
     fn backend_name(&self) -> &'static str {
         "MSSQL"
+    }
+
+    async fn cleanup(&mut self) -> Result<()> {
+        // MSSQL connections are automatically closed when dropped
+        // The close() method takes ownership, so we just log the cleanup
+        log::info!("Cleaned up MSSQL backend - connection will be closed on drop");
+        Ok(())
     }
 }
 

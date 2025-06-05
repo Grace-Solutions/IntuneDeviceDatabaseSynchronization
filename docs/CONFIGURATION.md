@@ -2,7 +2,7 @@
 
 ## Overview
 
-IntuneDeviceDatabaseSynchronization supports configuration through:
+MSGraphDBSynchronizer supports configuration through:
 1. **JSON configuration file** (`config.json`)
 2. **Environment variables** (override JSON settings)
 3. **Command-line arguments** (for service management)
