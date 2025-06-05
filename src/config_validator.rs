@@ -413,49 +413,25 @@ impl ConfigValidator {
     }
 
     fn validate_database_config(&mut self, config: &crate::config::AppConfig) {
-        if config.database.backends.is_empty() {
-            self.add_error(
-                "database.backends".to_string(),
-                ValidationErrorType::Required,
-                "At least one database backend must be specified".to_string(),
-                None,
-                Some("[\"sqlite\"]".to_string()),
-            );
-        }
-
-        let valid_backends = vec!["sqlite", "postgres", "mssql"];
-        for (i, backend) in config.database.backends.iter().enumerate() {
-            if !valid_backends.contains(&backend.as_str()) {
-                self.add_error(
-                    format!("database.backends[{}]", i),
-                    ValidationErrorType::InvalidValue,
-                    format!("Unknown database backend: '{}'", backend),
-                    Some(backend.clone()),
-                    Some("Valid backends: sqlite, postgres, mssql".to_string()),
-                );
-            }
-        }
-
         // SQLite validation
-        if config.database.backends.contains(&"sqlite".to_string()) {
-            let sqlite_path = &config.database.sqlite_path;
-            if sqlite_path.is_empty() {
-                if sqlite_path.is_empty() {
+        if let Some(sqlite_config) = &config.database.sqlite {
+            if sqlite_config.enabled {
+                if sqlite_config.database_path.is_empty() {
                     self.add_error(
-                        "database.sqlitePath".to_string(),
+                        "database.sqlite.databasePath".to_string(),
                         ValidationErrorType::Required,
-                        "SQLite path is required when using sqlite backend".to_string(),
+                        "SQLite database path is required when SQLite backend is enabled".to_string(),
                         None,
-                        Some("./output/devices.db".to_string()),
+                        Some("./data/msgraph_data.db".to_string()),
                     );
-                } else {
-                    // Check if directory exists or can be created
-                    if let Some(parent) = Path::new(sqlite_path).parent() {
+                } else if sqlite_config.database_path != ":memory:" {
+                    // Check if directory exists for file-based SQLite
+                    if let Some(parent) = std::path::Path::new(&sqlite_config.database_path).parent() {
                         if !parent.exists() {
                             self.add_warning(
-                                "database.sqlitePath".to_string(),
+                                "database.sqlite.databasePath".to_string(),
                                 ValidationWarningType::BestPractice,
-                                format!("SQLite directory does not exist: {}", parent.display()),
+                                format!("SQLite database directory does not exist: {}", parent.display()),
                                 "Directory will be created automatically".to_string(),
                             );
                         }
@@ -465,13 +441,13 @@ impl ConfigValidator {
         }
 
         // PostgreSQL validation
-        if config.database.backends.contains(&"postgres".to_string()) {
-            if let Some(postgres_config) = &config.database.postgres {
+        if let Some(postgres_config) = &config.database.postgres {
+            if postgres_config.enabled {
                 if postgres_config.connection_string.is_empty() {
                     self.add_error(
                         "database.postgres.connectionString".to_string(),
                         ValidationErrorType::Required,
-                        "PostgreSQL connection string is required".to_string(),
+                        "PostgreSQL connection string is required when PostgreSQL backend is enabled".to_string(),
                         None,
                         Some("postgres://user:password@localhost:5432/database".to_string()),
                     );
@@ -484,25 +460,17 @@ impl ConfigValidator {
                         Some("postgres://user:password@host:port/database".to_string()),
                     );
                 }
-            } else {
-                self.add_error(
-                    "database.postgres".to_string(),
-                    ValidationErrorType::Required,
-                    "PostgreSQL configuration is required when using postgres backend".to_string(),
-                    None,
-                    None,
-                );
             }
         }
 
         // MSSQL validation
-        if config.database.backends.contains(&"mssql".to_string()) {
-            if let Some(mssql_config) = &config.database.mssql {
+        if let Some(mssql_config) = &config.database.mssql {
+            if mssql_config.enabled {
                 if mssql_config.connection_string.is_empty() {
                     self.add_error(
                         "database.mssql.connectionString".to_string(),
                         ValidationErrorType::Required,
-                        "MSSQL connection string is required".to_string(),
+                        "MSSQL connection string is required when MSSQL backend is enabled".to_string(),
                         None,
                         Some("server=localhost;database=db;trusted_connection=true".to_string()),
                     );
@@ -515,33 +483,21 @@ impl ConfigValidator {
                         Some("server=host;database=db;uid=user;pwd=password".to_string()),
                     );
                 }
-            } else {
-                self.add_error(
-                    "database.mssql".to_string(),
-                    ValidationErrorType::Required,
-                    "MSSQL configuration is required when using mssql backend".to_string(),
-                    None,
-                    None,
-                );
             }
         }
 
-        // Table name validation
-        if config.database.table_name.is_empty() {
+        // Database backend validation - at least one must be enabled
+        let sqlite_enabled = config.database.sqlite.as_ref().map_or(false, |s| s.enabled);
+        let postgres_enabled = config.database.postgres.as_ref().map_or(false, |p| p.enabled);
+        let mssql_enabled = config.database.mssql.as_ref().map_or(false, |m| m.enabled);
+
+        if !sqlite_enabled && !postgres_enabled && !mssql_enabled {
             self.add_error(
-                "database.tableName".to_string(),
+                "database".to_string(),
                 ValidationErrorType::Required,
-                "Database table name is required".to_string(),
+                "At least one database backend must be enabled".to_string(),
                 None,
-                Some("devices".to_string()),
-            );
-        } else if !is_valid_table_name(&config.database.table_name) {
-            self.add_error(
-                "database.tableName".to_string(),
-                ValidationErrorType::InvalidFormat,
-                "Invalid table name format".to_string(),
-                Some(config.database.table_name.clone()),
-                Some("Use alphanumeric characters and underscores only".to_string()),
+                Some("Enable sqlite, postgres, or mssql backend".to_string()),
             );
         }
     }
@@ -960,9 +916,10 @@ mod tests {
             "prometheusPort": 9898,
             "logLevel": "info",
             "database": {
-                "backends": ["sqlite"],
-                "tableName": "devices",
-                "sqlitePath": "./output/devices.db"
+                "sqlite": {
+                    "enabled": true,
+                    "databasePath": "./output/devices.db"
+                }
             }
         }
         "#;
@@ -983,8 +940,10 @@ mod tests {
             "prometheusPort": 0,
             "logLevel": "invalid-level",
             "database": {
-                "backends": [],
-                "tableName": ""
+                "sqlite": {
+                    "enabled": false,
+                    "databasePath": ""
+                }
             }
         }
         "#;

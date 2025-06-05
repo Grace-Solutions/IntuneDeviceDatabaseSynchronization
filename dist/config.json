@@ -9,14 +9,17 @@
   "prometheusPort": 9898,
   "logLevel": "info",
   "database": {
-    "backends": ["sqlite"],
-    "tableName": "devices",
-    "sqlitePath": "./output/devices.db",
+    "sqlite": {
+      "enabled": true,
+      "databasePath": "./output/msgraph_data.db"
+    },
     "postgres": {
-      "connectionString": "postgres://user:password@localhost:5432/intune_devices"
+      "enabled": false,
+      "connectionString": "postgres://user:password@localhost:5432/msgraph_data"
     },
     "mssql": {
-      "connectionString": "server=localhost;database=intune_devices;trusted_connection=true"
+      "enabled": false,
+      "connectionString": "server=localhost;database=msgraph_data;trusted_connection=true"
     }
   },
   "backup": {

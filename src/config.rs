@@ -35,27 +35,30 @@ pub struct AppConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-    pub backends: Vec<String>,
-    #[serde(rename = "tableName", default = "default_table_name")]
-    pub table_name: String,
-    #[serde(rename = "sqlitePath", default = "default_sqlite_path")]
-    pub sqlite_path: String,
+    pub sqlite: Option<SqliteConfig>,
     pub postgres: Option<PostgresConfig>,
     pub mssql: Option<MssqlConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SqliteConfig {
+    pub enabled: bool,
+    #[serde(rename = "databasePath", default = "default_sqlite_path")]
+    pub database_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PostgresConfig {
+    pub enabled: bool,
     #[serde(rename = "connectionString")]
     pub connection_string: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MssqlConfig {
+    pub enabled: bool,
     #[serde(rename = "connectionString")]
     pub connection_string: String,
-    #[serde(rename = "tableName", default = "default_table_name")]
-    pub table_name: String,
 }
 
 // Default values
@@ -116,9 +119,10 @@ impl AppConfig {
                 prometheus_port: default_prometheus_port(),
                 log_level: default_log_level(),
                 database: DatabaseConfig {
-                    backends: vec!["sqlite".to_string()],
-                    table_name: default_table_name(),
-                    sqlite_path: default_sqlite_path(),
+                    sqlite: Some(SqliteConfig {
+                        enabled: true,
+                        database_path: default_sqlite_path(),
+                    }),
                     postgres: None,
                     mssql: None,
                 },
@@ -160,28 +164,27 @@ impl AppConfig {
         if let Ok(mssql_connection) = env::var("MSSQL_CONNECTION_STRING") {
             if config.database.mssql.is_none() {
                 config.database.mssql = Some(MssqlConfig {
+                    enabled: true,
                     connection_string: mssql_connection,
-                    table_name: default_table_name(),
                 });
             } else {
                 config.database.mssql.as_mut().unwrap().connection_string = mssql_connection;
             }
         }
-        if let Ok(mssql_table) = env::var("MSSQL_TABLE_NAME") {
-            if let Some(ref mut mssql) = config.database.mssql {
-                mssql.table_name = mssql_table;
-            }
-        }
 
-        // Validate required fields
-        if config.client_id.is_empty() {
-            return Err(anyhow::anyhow!("GRAPH_CLIENT_ID is required"));
-        }
-        if config.client_secret.is_empty() {
-            return Err(anyhow::anyhow!("GRAPH_CLIENT_SECRET is required"));
-        }
-        if config.tenant_id.is_empty() {
-            return Err(anyhow::anyhow!("GRAPH_TENANT_ID is required"));
+        // Validate required fields (unless mock API is enabled)
+        let mock_api_enabled = config.mock_graph_api.as_ref().map_or(false, |m| m.enabled);
+
+        if !mock_api_enabled {
+            if config.client_id.is_empty() {
+                return Err(anyhow::anyhow!("GRAPH_CLIENT_ID is required (unless mock API is enabled)"));
+            }
+            if config.client_secret.is_empty() {
+                return Err(anyhow::anyhow!("GRAPH_CLIENT_SECRET is required (unless mock API is enabled)"));
+            }
+            if config.tenant_id.is_empty() {
+                return Err(anyhow::anyhow!("GRAPH_TENANT_ID is required (unless mock API is enabled)"));
+            }
         }
 
         // Ensure device OS filter has at least one entry

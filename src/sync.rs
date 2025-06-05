@@ -261,9 +261,10 @@ mod tests {
             prometheus_port: 9898,
             log_level: "info".to_string(),
             database: crate::config::DatabaseConfig {
-                backends: vec!["sqlite".to_string()],
-                table_name: "devices".to_string(),
-                sqlite_path: ":memory:".to_string(),
+                sqlite: Some(crate::config::SqliteConfig {
+                    enabled: true,
+                    database_path: ":memory:".to_string(),
+                }),
                 postgres: None,
                 mssql: None,
             },

@@ -9,13 +9,16 @@
   "prometheusPort": 9898,
   "logLevel": "info",
   "database": {
-    "backends": ["sqlite"],
-    "tableName": "devices",
-    "sqlitePath": "./data/MSGraph.db",
+    "sqlite": {
+      "enabled": true,
+      "databasePath": "./data/msgraph_data.db"
+    },
     "postgres": {
+      "enabled": false,
       "connectionString": "postgres://user:password@localhost:5432/msgraph_data"
     },
     "mssql": {
+      "enabled": false,
       "connectionString": "server=localhost;database=msgraph_data;trusted_connection=true"
     }
   },
