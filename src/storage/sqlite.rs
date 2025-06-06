@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use chrono::{TimeZone, Utc};
+use chrono::TimeZone;
 
 use super::StorageBackend;
 use crate::path_utils;
@@ -37,10 +37,16 @@ impl SqliteBackend {
         // PRAGMA journal_mode returns a result, so we need to use query
         {
             let mut stmt = conn.prepare("PRAGMA journal_mode = WAL")?;
-            let _: String = stmt.query_row([], |row| row.get(0))?;
+            let result: String = stmt.query_row([], |row| row.get(0))?;
+            log::info!("SQLite journal mode set to: {}", result);
         } // stmt is dropped here
 
+        // Set synchronous mode to NORMAL for better performance with WAL
         conn.execute("PRAGMA synchronous = NORMAL", [])?;
+
+        // Additional WAL optimizations
+        conn.execute("PRAGMA wal_autocheckpoint = 1000", [])?; // Checkpoint every 1000 pages
+        conn.execute("PRAGMA cache_size = -64000", [])?; // 64MB cache
 
         Ok(Self {
             connection: Arc::new(Mutex::new(conn)),
@@ -61,7 +67,7 @@ impl SqliteBackend {
                     serde_json::Value::Number(n) => n.to_string(),
                     serde_json::Value::String(s) => {
                         // Check if this looks like a timestamp and normalize it
-                        if self.is_timestamp_string(s) {
+                        if self.is_timestamp_string(s) || self.is_timestamp_field_name(key) {
                             self.normalize_timestamp_value(s)
                         } else {
                             s.clone()
@@ -116,7 +122,7 @@ impl SqliteBackend {
 
             // Add missing columns
             for column in missing_columns {
-                let column_type = self.determine_column_type(obj.get(&column));
+                let column_type = self.determine_column_type_by_name(&column, obj.get(&column));
                 let alter_sql = format!(
                     "ALTER TABLE {} ADD COLUMN {} {}",
                     table_name, column, column_type
@@ -124,7 +130,7 @@ impl SqliteBackend {
 
                 match connection.execute(&alter_sql, []) {
                     Ok(_) => {
-                        log::info!("Added column {} to table {}", column, table_name);
+                        log::info!("Added column {} ({}) to table {}", column, column_type, table_name);
                     }
                     Err(e) => {
                         log::warn!("Failed to add column {} to table {}: {}", column, table_name, e);
@@ -168,7 +174,7 @@ impl SqliteBackend {
             Some(serde_json::Value::String(s)) => {
                 // Check if the string looks like a timestamp/date
                 if self.is_timestamp_string(s) {
-                    "TEXT" // Store timestamps as TEXT in ISO format
+                    "DATETIME" // Use DATETIME for proper timestamp sorting
                 } else {
                     "TEXT"
                 }
@@ -176,6 +182,22 @@ impl SqliteBackend {
             Some(serde_json::Value::Array(_)) | Some(serde_json::Value::Object(_)) => "TEXT", // Store as JSON string
             Some(serde_json::Value::Null) | None => "TEXT", // Default to TEXT for unknown/null values
         }
+    }
+
+    /// Determine column type by field name patterns (for better timestamp detection)
+    fn determine_column_type_by_name(&self, field_name: &str, value: Option<&serde_json::Value>) -> &'static str {
+        // Check if field name suggests it's a timestamp
+        let field_lower = field_name.to_lowercase();
+        if field_lower.contains("date") || field_lower.contains("time") ||
+           field_lower.ends_with("_at") || field_lower.ends_with("_on") ||
+           field_lower.contains("created") || field_lower.contains("updated") ||
+           field_lower.contains("modified") || field_lower.contains("enrolled") ||
+           field_lower.contains("last_sync") {
+            return "DATETIME";
+        }
+
+        // Fall back to value-based detection
+        self.determine_column_type(value)
     }
 
     /// Check if a string looks like a timestamp
@@ -187,20 +209,38 @@ impl SqliteBackend {
         chrono::DateTime::parse_from_rfc3339(s).is_ok()
     }
 
+    /// Check if a field name suggests it contains timestamp data
+    fn is_timestamp_field_name(&self, field_name: &str) -> bool {
+        let field_lower = field_name.to_lowercase();
+        field_lower.contains("date") || field_lower.contains("time") ||
+        field_lower.ends_with("_at") || field_lower.ends_with("_on") ||
+        field_lower.contains("created") || field_lower.contains("updated") ||
+        field_lower.contains("modified") || field_lower.contains("enrolled") ||
+        field_lower.contains("last_sync")
+    }
+
     /// Parse and normalize timestamp values
     fn normalize_timestamp_value(&self, value: &str) -> String {
         // Try to parse as RFC3339 first
         if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
-            return dt.with_timezone(&chrono::Utc).to_rfc3339();
+            // Convert to UTC and format as ISO 8601 for SQLite DATETIME
+            return dt.with_timezone(&chrono::Utc).format("%Y-%m-%d %H:%M:%S").to_string();
         }
 
         // Try other common formats
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S") {
-            return Utc.from_utc_datetime(&dt).to_rfc3339();
+            return chrono::Utc.from_utc_datetime(&dt).format("%Y-%m-%d %H:%M:%S").to_string();
         }
 
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S") {
-            return Utc.from_utc_datetime(&dt).to_rfc3339();
+            return dt.format("%Y-%m-%d %H:%M:%S").to_string();
+        }
+
+        // Try Microsoft Graph API timestamp format (with milliseconds and timezone)
+        if value.contains('T') && (value.contains('Z') || value.contains('+')) {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+                return dt.with_timezone(&chrono::Utc).format("%Y-%m-%d %H:%M:%S").to_string();
+            }
         }
 
         // If parsing fails, return the original value

@@ -1,0 +1,151 @@
+{
+  "clientId": "YOUR_AZURE_CLIENT_ID",
+  "clientSecret": "YOUR_AZURE_CLIENT_SECRET",
+  "tenantId": "YOUR_AZURE_TENANT_ID",
+  "pollInterval": "1h",
+  "cronSchedule": null,
+  "deviceOsFilter": ["Windows", "macOS", "Android", "iOS"],
+  "enablePrometheus": true,
+  "prometheusPort": 9898,
+  "logLevel": "debug",
+  "database": {
+    "sqlite": {
+      "enabled": true,
+      "databasePath": "./data/msgraph_data.db"
+    },
+    "postgres": {
+      "enabled": false,
+      "connectionString": "postgres://user:password@localhost:5432/msgraph_data"
+    },
+    "mssql": {
+      "enabled": false,
+      "connectionString": "server=localhost;database=msgraph_data;trusted_connection=true"
+    }
+  },
+  "endpoints": {
+    "endpoints": [
+      {
+        "name": "Devices",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices",
+        "tableName": "Devices",
+        "enabled": true,
+        "mockObjectCount": 30000,
+        "queryParams": {},
+        "selectFields": [
+          "id",
+          "deviceName",
+          "operatingSystem",
+          "osVersion",
+          "serialNumber",
+          "imei",
+          "model",
+          "manufacturer",
+          "enrolledDateTime",
+          "lastSyncDateTime",
+          "complianceState",
+          "azureADDeviceId",
+          "managedDeviceOwnerType",
+          "deviceType",
+          "deviceRegistrationState",
+          "isEncrypted",
+          "isSupervised",
+          "emailAddress",
+          "userDisplayName",
+          "userPrincipalName",
+          "tenantId",
+          "deviceId"
+        ],
+        "filter": null,
+        "fieldMappings": {}
+      },
+      {
+        "name": "Users",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/users",
+        "tableName": "Users",
+        "enabled": true,
+        "mockObjectCount": 5000,
+        "queryParams": {},
+        "selectFields": [
+          "id",
+          "userPrincipalName",
+          "displayName",
+          "mail",
+          "jobTitle",
+          "department",
+          "companyName",
+          "accountEnabled",
+          "createdDateTime",
+          "lastSignInDateTime"
+        ],
+        "filter": null,
+        "fieldMappings": {}
+      },
+      {
+        "name": "Groups",
+        "endpointUrl": "https://graph.microsoft.com/v1.0/groups",
+        "tableName": "Groups",
+        "enabled": true,
+        "mockObjectCount": 1000,
+        "queryParams": {},
+        "selectFields": [
+          "id",
+          "displayName",
+          "description",
+          "groupTypes",
+          "mail",
+          "mailEnabled",
+          "securityEnabled",
+          "createdDateTime"
+        ],
+        "filter": null,
+        "fieldMappings": {}
+      }
+    ]
+  },
+  "backup": {
+    "enabled": true,
+    "directory": "./data/backups",
+    "maxBackups": 3,
+    "scheduleEnabled": true,
+    "scheduleInterval": "24h"
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "https://your-webhook-endpoint.com/intune-sync",
+    "timeout_seconds": 30,
+    "retry_attempts": 3,
+    "retry_delay_seconds": 5,
+    "events": [
+      "sync_started",
+      "sync_completed",
+      "sync_failed",
+      "devices_updated",
+      "database_error",
+      "authentication_failed"
+    ],
+    "headers": {
+      "Authorization": "Bearer your-token",
+      "X-Service": "IntuneDeviceSync"
+    },
+    "secret": "your-webhook-secret-for-signature-verification"
+  },
+  "rateLimit": {
+    "maxRequestsPerMinute": 60,
+    "initialRetryDelaySeconds": 1,
+    "maxRetryDelaySeconds": 300,
+    "maxRetryAttempts": 5,
+    "backoffMultiplier": 2.0,
+    "enableJitter": true
+  },
+  "mockGraphApi": {
+    "enabled": true,
+    "simulateRateLimits": true,
+    "rateLimitProbability": 0.1,
+    "simulateAuthFailures": true,
+    "authFailureProbability": 0.05,
+    "simulateNetworkErrors": true,
+    "networkErrorProbability": 0.02,
+    "responseDelayMs": [100, 500],
+    "deviceUpdateFrequency": 0.1
+  }
+}

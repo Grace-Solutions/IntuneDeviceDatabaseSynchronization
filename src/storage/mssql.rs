@@ -101,7 +101,7 @@ impl MssqlBackend {
                     serde_json::Value::Number(n) => n.to_string(),
                     serde_json::Value::String(s) => {
                         // Check if this looks like a timestamp and normalize it
-                        if self.is_timestamp_string(s) {
+                        if self.is_timestamp_string(s) || self.is_timestamp_field_name(key) {
                             self.normalize_timestamp_value(s)
                         } else {
                             s.clone()
@@ -189,6 +189,32 @@ impl MssqlBackend {
         }
     }
 
+    /// Determine column type by field name patterns (for better timestamp detection)
+    fn determine_column_type_by_name(&self, field_name: &str, value: Option<&serde_json::Value>) -> &'static str {
+        // Check if field name suggests it's a timestamp
+        let field_lower = field_name.to_lowercase();
+        if field_lower.contains("date") || field_lower.contains("time") ||
+           field_lower.ends_with("_at") || field_lower.ends_with("_on") ||
+           field_lower.contains("created") || field_lower.contains("updated") ||
+           field_lower.contains("modified") || field_lower.contains("enrolled") ||
+           field_lower.contains("last_sync") {
+            return "DATETIME2";
+        }
+
+        // Fall back to value-based detection
+        self.determine_column_type(value)
+    }
+
+    /// Check if a field name suggests it contains timestamp data
+    fn is_timestamp_field_name(&self, field_name: &str) -> bool {
+        let field_lower = field_name.to_lowercase();
+        field_lower.contains("date") || field_lower.contains("time") ||
+        field_lower.ends_with("_at") || field_lower.ends_with("_on") ||
+        field_lower.contains("created") || field_lower.contains("updated") ||
+        field_lower.contains("modified") || field_lower.contains("enrolled") ||
+        field_lower.contains("last_sync")
+    }
+
     /// Get existing table columns
     async fn get_table_columns(&mut self, table_name: &str) -> Result<HashSet<String>> {
         let query = format!(
@@ -233,7 +259,7 @@ impl MssqlBackend {
 
             // Add missing columns
             for column in missing_columns {
-                let column_type = self.determine_column_type(obj.get(&column));
+                let column_type = self.determine_column_type_by_name(&column, obj.get(&column));
                 let alter_sql = format!(
                     "ALTER TABLE {} ADD {} {}",
                     table_name, column, column_type
@@ -241,7 +267,7 @@ impl MssqlBackend {
 
                 match self.client.simple_query(&alter_sql).await {
                     Ok(_) => {
-                        log::info!("Added column {} to table {}", column, table_name);
+                        log::info!("Added column {} ({}) to table {}", column, column_type, table_name);
                     }
                     Err(e) => {
                         log::warn!("Failed to add column {} to table {}: {}", column, table_name, e);

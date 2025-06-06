@@ -1,10 +1,17 @@
-# MSGraphDBSynchronizer v2.0.0
+# MSGraphDBSynchronizer v2.1.0
 
 A robust Microsoft Graph API database synchronization service with **dynamic multi-endpoint support**, advanced filtering, multi-database support, and comprehensive monitoring capabilities.
 
 ## 🚀 Features
 
-### **🆕 New in v2.0.0**
+### **🆕 New in v2.1.0**
+- **🔄 SQLite WAL Mode**: Enhanced concurrent access support for Metabase and other BI tools
+- **📅 Improved Timestamp Handling**: Proper timestamp column types across all databases for perfect sortability
+- **🎯 Smart Field Detection**: Automatic timestamp field detection by name patterns and content
+- **⚡ Performance Optimizations**: Enhanced WAL configuration with optimized cache settings
+- **🔧 Enhanced Logging**: Better visibility into column type assignments and database operations
+
+### **Previous Features (v2.0.0)**
 - **🎯 Dynamic Endpoint Support**: Automatically sync any Microsoft Graph endpoint with configurable object counts
 - **📊 Per-Endpoint Configuration**: Individual `mockObjectCount` settings for each endpoint
 - **🔧 Realistic Mock Data**: Enterprise-grade test data with proper column mappings per endpoint
@@ -15,7 +22,7 @@ A robust Microsoft Graph API database synchronization service with **dynamic mul
 - **🔄 Microsoft Graph Integration**: Sync any Graph API endpoint with OAuth2 authentication
 - **🌐 Multi-Endpoint Support**: Sync devices, users, groups, compliance policies, and any custom endpoints
 - **🎛️ Advanced OS Filtering**: Wildcard support with case-insensitive substring matching
-- **💾 Multi-Database Support**: SQLite, PostgreSQL, and MSSQL backends with automatic schema creation
+- **💾 Multi-Database Support**: SQLite (WAL mode), PostgreSQL, and MSSQL backends with automatic schema creation
 - **📊 Prometheus Metrics**: Comprehensive monitoring and observability
 - **🖥️ Cross-Platform**: Native binaries for Windows, Linux, and macOS
 - **🛠️ Service Management**: Windows service, systemd, and launchd support
@@ -28,6 +35,7 @@ A robust Microsoft Graph API database synchronization service with **dynamic mul
 - **✅ Config Validation**: Comprehensive configuration validation with detailed error reporting
 - **💾 Backup & Restore**: Automated SQLite database backups with retention policies
 - **🔔 Webhook Notifications**: Real-time event notifications for external integrations
+- **📊 BI Tool Ready**: SQLite WAL mode enables concurrent access for Metabase, Grafana, and other BI tools
 
 ## 📦 Quick Start
 
@@ -164,6 +172,24 @@ The service automatically creates tables for each enabled endpoint:
 - **Custom endpoints** - Any additional Graph API endpoints you configure
 
 Each table has columns dynamically created based on the endpoint's `selectFields` configuration. Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation and evolution.
+
+### Database Compatibility & BI Tools
+
+**SQLite WAL Mode** enables concurrent access for business intelligence tools:
+- ✅ **Metabase**: Connect directly to SQLite database while service is running
+- ✅ **Grafana**: Real-time dashboards with SQLite data source
+- ✅ **Power BI**: Import data without service interruption
+- ✅ **Tableau**: Live connections supported
+
+**Timestamp Handling** ensures proper sorting across all databases:
+- **SQLite**: `DATETIME` columns with ISO 8601 format
+- **PostgreSQL**: `TIMESTAMPTZ` columns with timezone support
+- **MSSQL**: `DATETIME2` columns with high precision
+
+**Smart Field Detection** automatically identifies timestamp fields:
+- Field names containing: `date`, `time`, `created`, `updated`, `modified`, `enrolled`, `last_sync`
+- Field names ending with: `_at`, `_on`
+- ISO 8601 timestamp content detection
 
 ## � Documentation
 

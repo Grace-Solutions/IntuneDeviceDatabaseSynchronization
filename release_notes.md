@@ -1,4 +1,4 @@
-# MSGraphDBSynchronizer v2.0.0 - Dynamic Multi-Endpoint Support
+# MSGraphDBSynchronizer v2025.06.06.0204 - Dynamic Multi-Endpoint Support
 
 ## 🆕 New Features
 
@@ -7,6 +7,7 @@
 - **📊 Per-Endpoint Data**: Realistic mock data generation tailored to each endpoint type
 - **🔧 Automatic Schema Evolution**: Dynamic table creation and column mapping based on endpoint data
 - **📱 Serial Number Device Names**: Real-world device naming using manufacturer-specific serial numbers
+- **⏰ Timestamp Versioning**: Proper yyyy.MM.dd.HHmm format for build tracking
 
 ### **Enhanced Mock Data Quality**
 - **👥 Users**: Realistic names, departments, job titles, and email addresses
@@ -98,4 +99,4 @@ Access Prometheus metrics at: `http://localhost:9898/metrics`
 
 ---
 
-**Full Changelog**: https://github.com/Grace-Solutions/MSGraphDBSynchronizer/compare/v1.0.0...v2.0.0
+**Full Changelog**: https://github.com/Grace-Solutions/MSGraphDBSynchronizer/compare/v2025.06.02.2230...v2025.06.06.0204
