@@ -11,9 +11,7 @@ use uuid::Uuid;
 pub struct MockGraphApiConfig {
     /// Enable mock mode instead of real Graph API
     pub enabled: bool,
-    /// Number of mock devices to generate
-    #[serde(rename = "deviceCount")]
-    pub device_count: u32,
+
     /// Simulate rate limiting responses
     #[serde(rename = "simulateRateLimits")]
     pub simulate_rate_limits: bool,
@@ -44,7 +42,6 @@ impl Default for MockGraphApiConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            device_count: 100,
             simulate_rate_limits: false,
             rate_limit_probability: 0.1,
             simulate_auth_failures: false,
@@ -96,6 +93,10 @@ pub struct MockDevice {
     pub user_display_name: Option<String>,
     #[serde(rename = "userPrincipalName")]
     pub user_principal_name: Option<String>,
+    #[serde(rename = "tenantId")]
+    pub tenant_id: String,
+    #[serde(rename = "deviceId")]
+    pub device_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -104,7 +105,7 @@ pub struct MockGraphResponse {
     pub odata_context: String,
     #[serde(rename = "@odata.count")]
     pub odata_count: Option<u32>,
-    pub value: Vec<MockDevice>,
+    pub value: Vec<serde_json::Value>,
     #[serde(rename = "@odata.nextLink")]
     pub odata_next_link: Option<String>,
 }
@@ -188,10 +189,16 @@ impl MockGraphApi {
 
         debug!("Mock API: Returning {} devices (skip: {}, top: {})", page_devices.len(), skip, top);
 
+        // Convert MockDevice to JSON for consistency
+        let json_devices: Vec<serde_json::Value> = page_devices
+            .into_iter()
+            .map(|device| serde_json::to_value(device).unwrap_or_default())
+            .collect();
+
         Ok(MockGraphResponse {
             odata_context: "https://graph.microsoft.com/v1.0/$metadata#deviceManagement/managedDevices".to_string(),
             odata_count: Some(total_count as u32),
-            value: page_devices,
+            value: json_devices,
             odata_next_link: next_link,
         })
     }
@@ -234,24 +241,464 @@ impl MockGraphApi {
         devices.len()
     }
 
+    /// Regenerate devices with a specific count
+    async fn regenerate_devices_with_count(&self, count: u32) {
+        info!("Regenerating {} mock devices", count);
+
+        // Clear existing devices
+        {
+            let mut devices = self.devices.write().await;
+            devices.clear();
+        }
+
+        // Generate new devices with the specified count
+        self.generate_mock_devices_internal(count).await;
+    }
+
+    /// Dynamic endpoint data generation - supports any enabled endpoint
+    pub async fn get_endpoint_data(
+        &self,
+        endpoint_name: &str,
+        endpoint_config: Option<&crate::endpoint::EndpointConfig>,
+        skip: Option<u32>,
+        top: Option<u32>,
+    ) -> Result<MockGraphResponse> {
+        if !self.config.enabled {
+            return Err(anyhow::anyhow!("Mock API is not enabled"));
+        }
+
+        // For devices endpoint, use the existing implementation but check if we need to regenerate
+        if endpoint_name == "devices" {
+            // Check if we need to regenerate devices based on endpoint config
+            let expected_count = endpoint_config
+                .and_then(|config| config.mock_object_count)
+                .unwrap_or(30000);
+
+            let current_count = self.get_device_count().await;
+            if current_count != expected_count as usize {
+                info!("Regenerating devices: current={}, expected={}", current_count, expected_count);
+                self.regenerate_devices_with_count(expected_count).await;
+            }
+
+            return self.get_managed_devices(skip, top).await;
+        }
+
+        // For other endpoints, generate dynamic mock data
+        self.generate_dynamic_endpoint_data(endpoint_name, endpoint_config, skip, top).await
+    }
+
+    /// Generate dynamic mock data for any endpoint
+    async fn generate_dynamic_endpoint_data(
+        &self,
+        endpoint_name: &str,
+        endpoint_config: Option<&crate::endpoint::EndpointConfig>,
+        skip: Option<u32>,
+        top: Option<u32>,
+    ) -> Result<MockGraphResponse> {
+        // Increment request count
+        {
+            let mut count = self.request_count.write().await;
+            *count += 1;
+        }
+
+        // Simulate various failure scenarios
+        self.simulate_failures().await?;
+
+        // Simulate response delay
+        self.simulate_delay().await;
+
+        // Get object count from endpoint config or use default
+        let object_count = endpoint_config
+            .and_then(|config| config.mock_object_count)
+            .unwrap_or(1000);
+
+        // Generate mock data based on endpoint type
+        let mock_data = self.generate_mock_objects_for_endpoint(endpoint_name, endpoint_config, object_count).await;
+
+        // Apply pagination
+        let skip = skip.unwrap_or(0) as usize;
+        let top = top.unwrap_or(1000) as usize;
+
+        let total_count = mock_data.len();
+        let end_index = std::cmp::min(skip + top, total_count);
+        let page_data = if skip < total_count {
+            mock_data[skip..end_index].to_vec()
+        } else {
+            Vec::new()
+        };
+
+        // Determine if there's a next page
+        let next_link = if end_index < total_count {
+            Some(format!(
+                "https://graph.microsoft.com/v1.0/{}?$skip={}&$top={}",
+                self.get_endpoint_path(endpoint_name), end_index, top
+            ))
+        } else {
+            None
+        };
+
+        debug!("Mock API: Returning {} {} objects (skip: {}, top: {})",
+               page_data.len(), endpoint_name, skip, top);
+
+        Ok(MockGraphResponse {
+            odata_context: format!("https://graph.microsoft.com/v1.0/$metadata#{}", endpoint_name),
+            odata_count: Some(total_count as u32),
+            value: page_data,
+            odata_next_link: next_link,
+        })
+    }
+
+    /// Generate mock objects for a specific endpoint
+    async fn generate_mock_objects_for_endpoint(
+        &self,
+        endpoint_name: &str,
+        endpoint_config: Option<&crate::endpoint::EndpointConfig>,
+        count: u32
+    ) -> Vec<serde_json::Value> {
+        let mut objects = Vec::new();
+
+        for i in 0..count {
+            let mock_object = match endpoint_name.to_lowercase().as_str() {
+                "users" => self.generate_mock_user_object(i, endpoint_config),
+                "groups" => self.generate_mock_group_object(i, endpoint_config),
+                "compliance_policies" => self.generate_mock_compliance_policy_object(i, endpoint_config),
+                "devices" => {
+                    // Convert MockDevice to JSON for consistency
+                    let device = self.generate_mock_user(i); // Temporary - will fix this
+                    serde_json::to_value(device).unwrap_or_default()
+                },
+                _ => {
+                    // Generic object generation for unknown endpoints
+                    let generic = self.generate_generic_mock_object(endpoint_name, i);
+                    serde_json::to_value(generic).unwrap_or_default()
+                }
+            };
+            objects.push(mock_object);
+        }
+
+        objects
+    }
+
+    /// Generate a mock user object
+    fn generate_mock_user(&self, index: u32) -> MockDevice {
+        let first_names = vec!["John", "Jane", "Michael", "Sarah", "David", "Emily"];
+        let last_names = vec!["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia"];
+
+        let first_name = first_names[index as usize % first_names.len()];
+        let last_name = last_names[(index as usize * 7) % last_names.len()];
+        let display_name = format!("{} {}", first_name, last_name);
+        let upn = format!("{}.{}@company.com", first_name.to_lowercase(), last_name.to_lowercase());
+
+        MockDevice {
+            id: Uuid::new_v4().to_string(),
+            device_name: display_name.clone(),
+            operating_system: "User".to_string(),
+            os_version: "1.0".to_string(),
+            serial_number: None,
+            imei: None,
+            model: "User Account".to_string(),
+            manufacturer: "Microsoft".to_string(),
+            enrolled_date_time: format_system_time(SystemTime::now()),
+            last_sync_date_time: format_system_time(SystemTime::now()),
+            compliance_state: "active".to_string(),
+            azure_ad_device_id: Some(Uuid::new_v4().to_string()),
+            managed_device_owner_type: "user".to_string(),
+            device_type: "user".to_string(),
+            device_registration_state: "registered".to_string(),
+            is_encrypted: false,
+            is_supervised: false,
+            email_address: Some(upn.clone()),
+            user_display_name: Some(display_name),
+            user_principal_name: Some(upn),
+            tenant_id: Uuid::new_v4().to_string(),
+            device_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Generate a mock group object
+    fn generate_mock_group(&self, index: u32) -> MockDevice {
+        let group_types = vec!["Security", "Distribution", "Microsoft 365", "Dynamic"];
+        let group_type = group_types[index as usize % group_types.len()];
+        let group_name = format!("{} Group {}", group_type, index + 1);
+
+        MockDevice {
+            id: Uuid::new_v4().to_string(),
+            device_name: group_name.clone(),
+            operating_system: "Group".to_string(),
+            os_version: "1.0".to_string(),
+            serial_number: None,
+            imei: None,
+            model: group_type.to_string(),
+            manufacturer: "Microsoft".to_string(),
+            enrolled_date_time: format_system_time(SystemTime::now()),
+            last_sync_date_time: format_system_time(SystemTime::now()),
+            compliance_state: "active".to_string(),
+            azure_ad_device_id: Some(Uuid::new_v4().to_string()),
+            managed_device_owner_type: "group".to_string(),
+            device_type: "group".to_string(),
+            device_registration_state: "registered".to_string(),
+            is_encrypted: false,
+            is_supervised: false,
+            email_address: Some(format!("{}@company.com", group_name.to_lowercase().replace(" ", ""))),
+            user_display_name: Some(group_name),
+            user_principal_name: None,
+            tenant_id: Uuid::new_v4().to_string(),
+            device_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Generate a mock compliance policy object
+    fn generate_mock_compliance_policy(&self, index: u32) -> MockDevice {
+        let policy_types = vec!["Windows", "iOS", "Android", "macOS"];
+        let policy_type = policy_types[index as usize % policy_types.len()];
+        let policy_name = format!("{} Compliance Policy {}", policy_type, index + 1);
+
+        MockDevice {
+            id: Uuid::new_v4().to_string(),
+            device_name: policy_name.clone(),
+            operating_system: policy_type.to_string(),
+            os_version: "1.0".to_string(),
+            serial_number: None,
+            imei: None,
+            model: "Compliance Policy".to_string(),
+            manufacturer: "Microsoft".to_string(),
+            enrolled_date_time: format_system_time(SystemTime::now()),
+            last_sync_date_time: format_system_time(SystemTime::now()),
+            compliance_state: "enabled".to_string(),
+            azure_ad_device_id: Some(Uuid::new_v4().to_string()),
+            managed_device_owner_type: "policy".to_string(),
+            device_type: "policy".to_string(),
+            device_registration_state: "active".to_string(),
+            is_encrypted: false,
+            is_supervised: false,
+            email_address: None,
+            user_display_name: Some(policy_name),
+            user_principal_name: None,
+            tenant_id: Uuid::new_v4().to_string(),
+            device_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Generate a generic mock object for unknown endpoints
+    fn generate_generic_mock_object(&self, endpoint_name: &str, index: u32) -> MockDevice {
+        let object_name = format!("{} Object {}", endpoint_name, index + 1);
+
+        MockDevice {
+            id: Uuid::new_v4().to_string(),
+            device_name: object_name.clone(),
+            operating_system: endpoint_name.to_string(),
+            os_version: "1.0".to_string(),
+            serial_number: None,
+            imei: None,
+            model: "Generic Object".to_string(),
+            manufacturer: "Microsoft".to_string(),
+            enrolled_date_time: format_system_time(SystemTime::now()),
+            last_sync_date_time: format_system_time(SystemTime::now()),
+            compliance_state: "active".to_string(),
+            azure_ad_device_id: Some(Uuid::new_v4().to_string()),
+            managed_device_owner_type: "object".to_string(),
+            device_type: endpoint_name.to_string(),
+            device_registration_state: "active".to_string(),
+            is_encrypted: false,
+            is_supervised: false,
+            email_address: None,
+            user_display_name: Some(object_name),
+            user_principal_name: None,
+            tenant_id: Uuid::new_v4().to_string(),
+            device_id: Uuid::new_v4().to_string(),
+        }
+    }
+
+    /// Generate a mock user object based on endpoint configuration
+    fn generate_mock_user_object(&self, index: u32, endpoint_config: Option<&crate::endpoint::EndpointConfig>) -> serde_json::Value {
+        let first_names = vec!["John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Jessica"];
+        let last_names = vec!["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis"];
+        let departments = vec!["Engineering", "Marketing", "Sales", "HR", "Finance", "Operations"];
+        let job_titles = vec!["Manager", "Developer", "Analyst", "Coordinator", "Director", "Specialist"];
+
+        let first_name = first_names[index as usize % first_names.len()];
+        let last_name = last_names[(index as usize * 7) % last_names.len()];
+        let display_name = format!("{} {}", first_name, last_name);
+        let upn = format!("{}.{}@company.com", first_name.to_lowercase(), last_name.to_lowercase());
+        let department = departments[index as usize % departments.len()];
+        let job_title = job_titles[index as usize % job_titles.len()];
+
+        // Get select fields from endpoint config or use defaults
+        let select_fields = endpoint_config
+            .and_then(|config| config.select_fields.as_ref())
+            .cloned()
+            .unwrap_or_else(|| vec![
+                "id".to_string(), "userPrincipalName".to_string(), "displayName".to_string(),
+                "mail".to_string(), "jobTitle".to_string(), "department".to_string(),
+                "companyName".to_string(), "accountEnabled".to_string(), "createdDateTime".to_string()
+            ]);
+
+        let mut user_object = serde_json::Map::new();
+
+        for field in select_fields {
+            let value = match field.as_str() {
+                "id" => serde_json::Value::String(Uuid::new_v4().to_string()),
+                "userPrincipalName" => serde_json::Value::String(upn.clone()),
+                "displayName" => serde_json::Value::String(display_name.clone()),
+                "mail" => serde_json::Value::String(upn.clone()),
+                "jobTitle" => serde_json::Value::String(format!("{} {}", job_title, department)),
+                "department" => serde_json::Value::String(department.to_string()),
+                "companyName" => serde_json::Value::String("Contoso Corporation".to_string()),
+                "accountEnabled" => serde_json::Value::Bool(index % 10 != 0), // 90% enabled
+                "createdDateTime" => serde_json::Value::String(format_system_time(SystemTime::now())),
+                "lastSignInDateTime" => serde_json::Value::String(format_system_time(SystemTime::now())),
+                _ => serde_json::Value::String(format!("{}_{}", field, index)),
+            };
+            user_object.insert(field, value);
+        }
+
+        serde_json::Value::Object(user_object)
+    }
+
+    /// Generate a mock group object based on endpoint configuration
+    fn generate_mock_group_object(&self, index: u32, endpoint_config: Option<&crate::endpoint::EndpointConfig>) -> serde_json::Value {
+        let group_types = vec!["Security", "Distribution", "Microsoft 365", "Dynamic"];
+        let group_type = group_types[index as usize % group_types.len()];
+        let group_name = format!("{} Group {}", group_type, index + 1);
+        let description = format!("This is a {} group for organizational purposes", group_type.to_lowercase());
+
+        // Get select fields from endpoint config or use defaults
+        let select_fields = endpoint_config
+            .and_then(|config| config.select_fields.as_ref())
+            .cloned()
+            .unwrap_or_else(|| vec![
+                "id".to_string(), "displayName".to_string(), "description".to_string(),
+                "groupTypes".to_string(), "mail".to_string(), "mailEnabled".to_string(),
+                "securityEnabled".to_string(), "createdDateTime".to_string()
+            ]);
+
+        let mut group_object = serde_json::Map::new();
+
+        for field in select_fields {
+            let value = match field.as_str() {
+                "id" => serde_json::Value::String(Uuid::new_v4().to_string()),
+                "displayName" => serde_json::Value::String(group_name.clone()),
+                "description" => serde_json::Value::String(description.clone()),
+                "groupTypes" => {
+                    let types = if group_type == "Microsoft 365" {
+                        vec!["Unified"]
+                    } else if group_type == "Dynamic" {
+                        vec!["DynamicMembership"]
+                    } else {
+                        vec![]
+                    };
+                    serde_json::Value::Array(types.into_iter().map(|t| serde_json::Value::String(t.to_string())).collect())
+                },
+                "mail" => serde_json::Value::String(format!("{}@company.com", group_name.to_lowercase().replace(" ", ""))),
+                "mailEnabled" => serde_json::Value::Bool(group_type == "Distribution" || group_type == "Microsoft 365"),
+                "securityEnabled" => serde_json::Value::Bool(group_type == "Security" || group_type == "Dynamic"),
+                "createdDateTime" => serde_json::Value::String(format_system_time(SystemTime::now())),
+                _ => serde_json::Value::String(format!("{}_{}", field, index)),
+            };
+            group_object.insert(field, value);
+        }
+
+        serde_json::Value::Object(group_object)
+    }
+
+    /// Generate a mock compliance policy object based on endpoint configuration
+    fn generate_mock_compliance_policy_object(&self, index: u32, endpoint_config: Option<&crate::endpoint::EndpointConfig>) -> serde_json::Value {
+        let policy_types = vec!["Windows", "iOS", "Android", "macOS"];
+        let policy_type = policy_types[index as usize % policy_types.len()];
+        let policy_name = format!("{} Compliance Policy {}", policy_type, index + 1);
+        let description = format!("Compliance policy for {} devices", policy_type);
+
+        // Get select fields from endpoint config or use defaults
+        let select_fields = endpoint_config
+            .and_then(|config| config.select_fields.as_ref())
+            .cloned()
+            .unwrap_or_else(|| vec![
+                "id".to_string(), "displayName".to_string(), "description".to_string(),
+                "platformType".to_string(), "createdDateTime".to_string(), "lastModifiedDateTime".to_string()
+            ]);
+
+        let mut policy_object = serde_json::Map::new();
+
+        for field in select_fields {
+            let value = match field.as_str() {
+                "id" => serde_json::Value::String(Uuid::new_v4().to_string()),
+                "displayName" => serde_json::Value::String(policy_name.clone()),
+                "description" => serde_json::Value::String(description.clone()),
+                "platformType" => serde_json::Value::String(policy_type.to_lowercase()),
+                "createdDateTime" => serde_json::Value::String(format_system_time(SystemTime::now())),
+                "lastModifiedDateTime" => serde_json::Value::String(format_system_time(SystemTime::now())),
+                _ => serde_json::Value::String(format!("{}_{}", field, index)),
+            };
+            policy_object.insert(field, value);
+        }
+
+        serde_json::Value::Object(policy_object)
+    }
+
+    /// Get the API path for an endpoint
+    fn get_endpoint_path(&self, endpoint_name: &str) -> String {
+        match endpoint_name {
+            "devices" => "deviceManagement/managedDevices".to_string(),
+            "users" => "users".to_string(),
+            "groups" => "groups".to_string(),
+            "compliance_policies" => "deviceManagement/deviceCompliancePolicies".to_string(),
+            _ => endpoint_name.to_string(),
+        }
+    }
+
     async fn generate_mock_devices(&self) {
-        info!("Generating {} mock devices", self.config.device_count);
-        
+        // Use default device count since it's now per-endpoint
+        let count = 30000; // Default fallback
+        self.generate_mock_devices_internal(count).await;
+    }
+
+    async fn generate_mock_devices_internal(&self, device_count: u32) {
+        info!("Generating {} mock devices", device_count);
+
         let operating_systems = vec!["Windows", "macOS", "Android", "iOS"];
         let manufacturers = vec!["Microsoft", "Apple", "Samsung", "Google", "Dell", "HP", "Lenovo"];
         let compliance_states = vec!["compliant", "noncompliant", "conflict", "error", "unknown"];
         let device_types = vec!["desktop", "laptop", "tablet", "phone"];
 
+        // Realistic first and last names for user generation
+        let first_names = vec![
+            "John", "Jane", "Michael", "Sarah", "David", "Emily", "Robert", "Jessica",
+            "William", "Ashley", "James", "Amanda", "Christopher", "Stephanie", "Daniel",
+            "Melissa", "Matthew", "Nicole", "Anthony", "Elizabeth", "Mark", "Helen",
+            "Donald", "Deborah", "Steven", "Rachel", "Paul", "Carolyn", "Andrew", "Janet"
+        ];
+        let last_names = vec![
+            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
+            "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson",
+            "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson",
+            "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson"
+        ];
+
+        let tenant_id = Uuid::new_v4().to_string(); // Single tenant for all devices
         let mut devices = self.devices.write().await;
-        
-        for i in 0..self.config.device_count {
+
+        for i in 0..device_count {
             let os = operating_systems[i as usize % operating_systems.len()];
             let manufacturer = manufacturers[i as usize % manufacturers.len()];
             let device_type = device_types[i as usize % device_types.len()];
-            
+
             let device_id = Uuid::new_v4().to_string();
-            let device_name = format!("{}-{}-{:04}", manufacturer, device_type, i + 1);
-            
+            let azure_ad_device_id = Uuid::new_v4().to_string();
+
+            // Generate realistic user
+            let first_name = first_names[i as usize % first_names.len()];
+            let last_name = last_names[(i as usize * 7) % last_names.len()]; // Different pattern for variety
+            let user_display_name = format!("{} {}", first_name, last_name);
+            let user_principal_name = format!("{}.{}@company.com",
+                first_name.to_lowercase(), last_name.to_lowercase());
+            let email_address = user_principal_name.clone();
+
+            // Generate realistic serial numbers based on manufacturer
+            let serial_number = self.generate_realistic_serial_number(manufacturer, os, i);
+
+            // Use serial number as device name (uppercase, real-world practice)
+            let device_name = serial_number.clone();
+
             let os_version = match os {
                 "Windows" => format!("10.0.{}.{}", 19041 + (i % 5), 1000 + (i % 100)),
                 "macOS" => format!("12.{}.{}", i % 7, i % 10),
@@ -260,12 +707,16 @@ impl MockGraphApi {
                 _ => "1.0.0".to_string(),
             };
 
-            let model = match os {
-                "Windows" => format!("{} {}", manufacturer, device_type),
-                "macOS" => format!("MacBook {}", if i % 2 == 0 { "Pro" } else { "Air" }),
-                "Android" => format!("Galaxy {}", device_type),
-                "iOS" => format!("iPhone {}", 12 + (i % 4)),
-                _ => format!("{} Device", manufacturer),
+            let model = match (manufacturer, os) {
+                ("Apple", "macOS") => format!("MacBook {}", if i % 2 == 0 { "Pro" } else { "Air" }),
+                ("Apple", "iOS") => format!("iPhone {}", 12 + (i % 4)),
+                ("Samsung", "Android") => format!("Galaxy {}", if device_type == "phone" { "S22" } else { "Tab S8" }),
+                ("Google", "Android") => format!("Pixel {}", 6 + (i % 3)),
+                ("Dell", "Windows") => format!("OptiPlex {}", if device_type == "desktop" { "7090" } else { "Latitude 5520" }),
+                ("HP", "Windows") => format!("EliteBook {}", if device_type == "laptop" { "850" } else { "ProDesk 600" }),
+                ("Lenovo", "Windows") => format!("ThinkPad {}", if device_type == "laptop" { "X1" } else { "M720q" }),
+                ("Microsoft", "Windows") => format!("Surface {}", if device_type == "laptop" { "Laptop 4" } else { "Pro 8" }),
+                _ => format!("{} {}", manufacturer, device_type),
             };
 
             let enrolled_time = SystemTime::now() - Duration::from_secs((i as u64 % 365) * 86400);
@@ -276,26 +727,28 @@ impl MockGraphApi {
                 device_name,
                 operating_system: os.to_string(),
                 os_version,
-                serial_number: Some(format!("SN{:08}", i)),
-                imei: if os == "Android" || os == "iOS" { 
-                    Some(format!("{:015}", 123456789012345u64 + i as u64)) 
-                } else { 
-                    None 
+                serial_number: Some(serial_number),
+                imei: if os == "Android" || os == "iOS" {
+                    Some(format!("{:015}", 123456789012345u64 + i as u64))
+                } else {
+                    None
                 },
                 model,
                 manufacturer: manufacturer.to_string(),
                 enrolled_date_time: format_system_time(enrolled_time),
                 last_sync_date_time: format_system_time(last_sync_time),
                 compliance_state: compliance_states[i as usize % compliance_states.len()].to_string(),
-                azure_ad_device_id: Some(Uuid::new_v4().to_string()),
+                azure_ad_device_id: Some(azure_ad_device_id),
                 managed_device_owner_type: "company".to_string(),
                 device_type: device_type.to_string(),
                 device_registration_state: "registered".to_string(),
                 is_encrypted: i % 3 != 0, // Most devices encrypted
                 is_supervised: i % 4 == 0, // Some devices supervised
-                email_address: Some(format!("user{}@company.com", i + 1)),
-                user_display_name: Some(format!("User {}", i + 1)),
-                user_principal_name: Some(format!("user{}@company.com", i + 1)),
+                email_address: Some(email_address),
+                user_display_name: Some(user_display_name),
+                user_principal_name: Some(user_principal_name),
+                tenant_id: tenant_id.clone(),
+                device_id: device_id.clone(),
             };
 
             devices.insert(device_id, device);
@@ -303,6 +756,50 @@ impl MockGraphApi {
 
         info!("Generated {} mock devices", devices.len());
     }
+
+    fn generate_realistic_serial_number(&self, manufacturer: &str, os: &str, index: u32) -> String {
+        match manufacturer {
+            "Dell" => {
+                // Dell service tags are typically 7 characters, alphanumeric
+                format!("{:07X}", 0x1000000 + index)
+            },
+            "HP" => {
+                // HP serial numbers often start with manufacturer code
+                format!("CND{:07}", 1000000 + index)
+            },
+            "Lenovo" => {
+                // Lenovo serial numbers are often 8 characters
+                format!("PC{:06X}", 0x100000 + index)
+            },
+            "Apple" => {
+                if os == "macOS" {
+                    // Mac serial numbers are 10-12 characters
+                    format!("C02{:07X}", 0x1000000 + index)
+                } else {
+                    // iOS device serial numbers
+                    format!("F{:010X}", 0x1000000000 + index as u64)
+                }
+            },
+            "Microsoft" => {
+                // Surface devices
+                format!("MS{:08X}", 0x10000000 + index)
+            },
+            "Samsung" => {
+                // Samsung device serial numbers
+                format!("RF{:08X}", 0x10000000 + index)
+            },
+            "Google" => {
+                // Google Pixel serial numbers
+                format!("GP{:08X}", 0x10000000 + index)
+            },
+            _ => {
+                // Generic format
+                format!("SN{:08X}", 0x10000000 + index)
+            }
+        }
+    }
+
+
 
     async fn simulate_failures(&self) -> Result<()> {
         // Simple pseudo-random using system time
@@ -403,7 +900,6 @@ mod tests {
     async fn test_mock_api_creation() {
         let config = MockGraphApiConfig {
             enabled: true,
-            device_count: 5,
             ..Default::default()
         };
         
@@ -421,7 +917,6 @@ mod tests {
     async fn test_mock_api_pagination() {
         let config = MockGraphApiConfig {
             enabled: true,
-            device_count: 10,
             ..Default::default()
         };
         

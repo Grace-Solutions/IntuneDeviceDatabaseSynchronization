@@ -51,7 +51,7 @@ impl SyncService {
         log::debug!("Endpoints configuration validated");
 
         log::debug!("Creating endpoint manager");
-        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), config.mock_graph_api.clone());
+        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), config.mock_graph_api.clone(), config.rate_limit.clone());
         log::debug!("Endpoint manager created");
 
         info!("Sync service initialized with backends: {:?}", storage.get_backend_names());
@@ -303,7 +303,7 @@ mod tests {
         storage_manager.initialize().await.unwrap();
 
         let endpoints_config = config.get_endpoints_config();
-        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), None);
+        let endpoint_manager = EndpointManager::new(endpoints_config, auth_client.clone(), None, None);
 
         let sync_service = SyncService {
             config: config.clone(),

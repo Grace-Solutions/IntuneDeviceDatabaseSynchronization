@@ -1,6 +1,6 @@
 [package]
 name = "MSGraphDBSynchronizer"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["Grace Solutions"]
 description = "Microsoft Graph API database synchronization service with multi-endpoint support"
@@ -70,6 +70,9 @@ base64 = "0.21"
 url = "2.4"
 regex = "1.10"
 hex = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "winsvc"] }

@@ -25,20 +25,45 @@
   "endpoints": {
     "endpoints": [
       {
-        "name": "devices",
+        "name": "Devices",
         "endpointUrl": "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices",
-        "tableName": "devices",
+        "tableName": "Devices",
         "enabled": true,
+        "mockObjectCount": 30000,
         "queryParams": {},
-        "selectFields": null,
+        "selectFields": [
+          "id",
+          "deviceName",
+          "operatingSystem",
+          "osVersion",
+          "serialNumber",
+          "imei",
+          "model",
+          "manufacturer",
+          "enrolledDateTime",
+          "lastSyncDateTime",
+          "complianceState",
+          "azureADDeviceId",
+          "managedDeviceOwnerType",
+          "deviceType",
+          "deviceRegistrationState",
+          "isEncrypted",
+          "isSupervised",
+          "emailAddress",
+          "userDisplayName",
+          "userPrincipalName",
+          "tenantId",
+          "deviceId"
+        ],
         "filter": null,
         "fieldMappings": {}
       },
       {
-        "name": "users",
+        "name": "Users",
         "endpointUrl": "https://graph.microsoft.com/v1.0/users",
-        "tableName": "users",
-        "enabled": false,
+        "tableName": "Users",
+        "enabled": true,
+        "mockObjectCount": 5000,
         "queryParams": {},
         "selectFields": [
           "id",
@@ -56,10 +81,11 @@
         "fieldMappings": {}
       },
       {
-        "name": "groups",
+        "name": "Groups",
         "endpointUrl": "https://graph.microsoft.com/v1.0/groups",
-        "tableName": "groups",
-        "enabled": false,
+        "tableName": "Groups",
+        "enabled": true,
+        "mockObjectCount": 1000,
         "queryParams": {},
         "selectFields": [
           "id",
@@ -113,12 +139,11 @@
   },
   "mockGraphApi": {
     "enabled": true,
-    "deviceCount": 50,
-    "simulateRateLimits": false,
+    "simulateRateLimits": true,
     "rateLimitProbability": 0.1,
-    "simulateAuthFailures": false,
+    "simulateAuthFailures": true,
     "authFailureProbability": 0.05,
-    "simulateNetworkErrors": false,
+    "simulateNetworkErrors": true,
     "networkErrorProbability": 0.02,
     "responseDelayMs": [100, 500],
     "deviceUpdateFrequency": 0.1

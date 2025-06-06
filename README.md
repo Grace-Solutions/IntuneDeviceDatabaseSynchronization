@@ -1,11 +1,19 @@
-# MSGraphDBSynchronizer
+# MSGraphDBSynchronizer v2.0.0
 
-A robust Microsoft Graph API database synchronization service with multi-endpoint support, advanced filtering, multi-database support, and comprehensive monitoring capabilities.
+A robust Microsoft Graph API database synchronization service with **dynamic multi-endpoint support**, advanced filtering, multi-database support, and comprehensive monitoring capabilities.
 
 ## 🚀 Features
 
-- **🔄 Microsoft Intune Integration**: Sync device data from Microsoft Graph API with OAuth2 authentication
-- **🌐 Multi-Endpoint Support**: Sync multiple Microsoft Graph endpoints to separate tables (devices, users, groups, compliance policies)
+### **🆕 New in v2.0.0**
+- **🎯 Dynamic Endpoint Support**: Automatically sync any Microsoft Graph endpoint with configurable object counts
+- **📊 Per-Endpoint Configuration**: Individual `mockObjectCount` settings for each endpoint
+- **🔧 Realistic Mock Data**: Enterprise-grade test data with proper column mappings per endpoint
+- **📱 Serial Number Device Names**: Real-world device naming using manufacturer-specific serial numbers
+- **🏗️ Dynamic Schema Evolution**: Automatic table creation and column mapping based on endpoint data
+
+### **Core Features**
+- **🔄 Microsoft Graph Integration**: Sync any Graph API endpoint with OAuth2 authentication
+- **🌐 Multi-Endpoint Support**: Sync devices, users, groups, compliance policies, and any custom endpoints
 - **🎛️ Advanced OS Filtering**: Wildcard support with case-insensitive substring matching
 - **💾 Multi-Database Support**: SQLite, PostgreSQL, and MSSQL backends with automatic schema creation
 - **📊 Prometheus Metrics**: Comprehensive monitoring and observability
@@ -63,7 +71,7 @@ For building from source, see the [Build Guide](docs/BUILD.md).
 
 ### Quick Configuration
 
-1. **Azure Setup**: Create an Azure App Registration with Intune permissions
+1. **Azure Setup**: Create an Azure App Registration with Microsoft Graph permissions
 2. **Edit config.json**:
    ```json
    {
@@ -71,10 +79,37 @@ For building from source, see the [Build Guide](docs/BUILD.md).
      "clientSecret": "your-azure-client-secret",
      "tenantId": "your-azure-tenant-id",
      "pollInterval": "1h",
-     "deviceOsFilter": ["Windows", "macOS", "Android"],
+     "deviceOsFilter": ["Windows", "macOS", "Android", "iOS"],
      "database": {
-       "backends": ["sqlite"],
-       "sqlitePath": "./output/devices.db"
+       "sqlite": {
+         "enabled": true,
+         "databasePath": "./data/msgraph_data.db"
+       }
+     },
+     "endpoints": {
+       "endpoints": [
+         {
+           "name": "Devices",
+           "enabled": true,
+           "mockObjectCount": 30000,
+           "selectFields": ["id", "deviceName", "operatingSystem", "serialNumber"]
+         },
+         {
+           "name": "Users",
+           "enabled": true,
+           "mockObjectCount": 5000,
+           "selectFields": ["id", "userPrincipalName", "displayName", "mail"]
+         },
+         {
+           "name": "Groups",
+           "enabled": true,
+           "mockObjectCount": 1000,
+           "selectFields": ["id", "displayName", "groupTypes", "securityEnabled"]
+         }
+       ]
+     },
+     "mockGraphApi": {
+       "enabled": true
      }
    }
    ```
@@ -122,11 +157,13 @@ Key metrics include:
 - Authentication and HTTP metrics
 
 ### Database Schema
-The service automatically creates:
-- **devices** table - Main device information
-- **device_metadata** table - Additional unmapped fields
+The service automatically creates tables for each enabled endpoint:
+- **Devices** table - Device information with serial number device names
+- **Users** table - User accounts with realistic names and departments
+- **Groups** table - Security, Distribution, Microsoft 365, and Dynamic groups
+- **Custom endpoints** - Any additional Graph API endpoints you configure
 
-Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation.
+Each table has columns dynamically created based on the endpoint's `selectFields` configuration. Supports SQLite, PostgreSQL, and MSSQL with automatic schema creation and evolution.
 
 ## � Documentation
 

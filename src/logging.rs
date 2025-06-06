@@ -1,6 +1,6 @@
 use anyhow::Result;
 use flexi_logger::{
-    Age, Cleanup, Criterion, DeferredNow, FileSpec, Logger, Naming, Record, WriteMode,
+    DeferredNow, FileSpec, Logger, Record, WriteMode,
 };
 use log::LevelFilter;
 use std::io::{self, Write};
@@ -52,19 +52,19 @@ pub async fn setup_logging(_config: &AppConfig) -> Result<()> {
     // Ensure logs directory exists
     path_utils::ensure_directory_exists(&logs_dir).await?;
 
+    // Use synchronous write mode to avoid "Send" errors in service environments
+    // For now, always use Direct mode to prevent async issues
+    let write_mode = WriteMode::Direct;
+
     let _logger = Logger::try_with_str(&log_level)?
         .log_to_file(
             FileSpec::default()
                 .directory(&logs_dir)
-                .basename("MSGraphDBSynchronizer")
+                .basename(&format!("MSGraphDBSynchronizer_{}", format_timestamp()))  // Exact format requested
                 .suffix("log")
+                .suppress_timestamp()  // Prevent flexi_logger from adding its own timestamp
         )
-        .rotate(
-            Criterion::Age(Age::Day),
-            Naming::Timestamps,
-            Cleanup::KeepLogFiles(30), // Keep 30 days of logs
-        )
-        .write_mode(WriteMode::Async)
+        .write_mode(write_mode)
         .format(custom_format)
         .duplicate_to_stderr(flexi_logger::Duplicate::Info) // Also log to stderr for service mode
         .start()?;
@@ -74,6 +74,7 @@ pub async fn setup_logging(_config: &AppConfig) -> Result<()> {
 
     log::info!("Logging initialized with level: {}", log_level);
     log::info!("Log files will be written to: {}", logs_dir.display());
+    log::info!("Write mode: {:?}", write_mode);
 
     Ok(())
 }
@@ -87,6 +88,32 @@ fn determine_log_level() -> String {
             "info".to_string()
         }
     })
+}
+
+/// Detects if we're running in a service environment where async logging might cause issues
+fn is_service_environment() -> bool {
+    // Check for common service environment indicators
+    std::env::var("SYSTEMD_EXEC_PID").is_ok() ||  // systemd
+    std::env::var("LAUNCHD_SOCKET").is_ok() ||    // launchd
+    std::env::var("SERVICE_NAME").is_ok() ||      // Windows service
+    std::env::var("INVOCATION_ID").is_ok()        // systemd invocation
+}
+
+/// Formats timestamp in the requested format: YYYYMMDD_HHMMSS
+fn format_timestamp() -> String {
+    use std::time::SystemTime;
+
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Convert to local time components
+    let datetime = chrono::DateTime::from_timestamp(now as i64, 0)
+        .unwrap_or_else(|| chrono::Utc::now())
+        .with_timezone(&chrono::Local);
+
+    datetime.format("%Y%m%d_%H%M%S").to_string()
 }
 
 /// Parses log level string to LevelFilter

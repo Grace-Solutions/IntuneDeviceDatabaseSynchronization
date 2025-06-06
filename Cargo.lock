@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "MSGraphDBSynchronizer"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -19,6 +19,7 @@ dependencies = [
  "hex",
  "hyper 0.14.32",
  "lazy_static",
+ "libc",
  "log",
  "mockito",
  "prometheus",

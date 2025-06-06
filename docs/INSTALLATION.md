@@ -1,5 +1,7 @@
 # Installation Guide
 
+> **📖 Service Management**: For detailed service management documentation including advanced configuration, troubleshooting, and platform-specific details, see [SERVICE_MANAGEMENT.md](SERVICE_MANAGEMENT.md).
+
 ## Prerequisites
 
 - **Operating System**: Windows 10/11, Linux (Ubuntu 20.04+), or macOS 10.15+
@@ -109,36 +111,62 @@ See [Build Guide](BUILD.md) for detailed build instructions.
    ```bash
    sudo unzip MSGraphDBSynchronizer-*.zip -d /opt/msgraph-db-synchronizer
    sudo chmod +x /opt/msgraph-db-synchronizer/MSGraphDBSynchronizer
+   cd /opt/msgraph-db-synchronizer
    ```
 
-2. **Create systemd service**:
+2. **Install service** (automated):
+   ```bash
+   # This automatically creates service user, systemd service file, and enables the service
+   sudo ./MSGraphDBSynchronizer install
+   ```
+
+3. **Start the service**:
+   ```bash
+   sudo ./MSGraphDBSynchronizer start
+   ```
+
+#### Manual systemd Setup (Alternative)
+
+If you prefer manual setup or need customization:
+
+1. **Create service user**:
+   ```bash
+   sudo useradd -r -s /bin/false msgraph-db-synchronizer
+   sudo chown -R msgraph-db-synchronizer:msgraph-db-synchronizer /opt/msgraph-db-synchronizer
+   ```
+
+2. **Create systemd service file**:
    ```bash
    sudo tee /etc/systemd/system/msgraph-db-synchronizer.service > /dev/null <<EOF
    [Unit]
    Description=Microsoft Graph Database Synchronizer Service
    After=network.target
+   Wants=network.target
 
    [Service]
    Type=simple
-   User=msgraph-sync
-   Group=msgraph-sync
+   User=msgraph-db-synchronizer
+   Group=msgraph-db-synchronizer
    WorkingDirectory=/opt/msgraph-db-synchronizer
    ExecStart=/opt/msgraph-db-synchronizer/MSGraphDBSynchronizer run
    Restart=always
    RestartSec=10
+   StandardOutput=journal
+   StandardError=journal
+
+   # Security settings
+   NoNewPrivileges=true
+   PrivateTmp=true
+   ProtectSystem=strict
+   ProtectHome=true
+   ReadWritePaths=/opt/msgraph-db-synchronizer
 
    [Install]
    WantedBy=multi-user.target
    EOF
    ```
 
-3. **Create service user**:
-   ```bash
-   sudo useradd -r -s /bin/false msgraph-sync
-   sudo chown -R msgraph-sync:msgraph-sync /opt/msgraph-db-synchronizer
-   ```
-
-4. **Enable and start service**:
+3. **Enable and start service**:
    ```bash
    sudo systemctl daemon-reload
    sudo systemctl enable msgraph-db-synchronizer
@@ -154,49 +182,97 @@ cd /opt/msgraph-db-synchronizer
 
 ### macOS
 
-#### Using launchd
+#### Using launchd (Recommended)
 
 1. **Extract and install**:
    ```bash
    sudo unzip MSGraphDBSynchronizer-*.zip -d /opt/msgraph-db-synchronizer
    sudo chmod +x /opt/msgraph-db-synchronizer/MSGraphDBSynchronizer
+   cd /opt/msgraph-db-synchronizer
+   ```
+
+2. **Install service** (automated):
+   ```bash
+   # This automatically creates service user, launchd plist, and loads the service
+   sudo ./MSGraphDBSynchronizer install
+   ```
+
+3. **Start the service**:
+   ```bash
+   sudo ./MSGraphDBSynchronizer start
+   ```
+
+#### Manual launchd Setup (Alternative)
+
+If you prefer manual setup or need customization:
+
+1. **Create service user**:
+   ```bash
+   # Find available UID in system range
+   for uid in {200..400}; do
+       if ! dscl . list /Users UniqueID | grep -q " $uid$"; then
+           echo "Using UID: $uid"
+           break
+       fi
+   done
+
+   # Create user
+   sudo dscl . create /Users/_msgraphsync
+   sudo dscl . create /Users/_msgraphsync UserShell /usr/bin/false
+   sudo dscl . create /Users/_msgraphsync RealName "MSGraphDBSynchronizer Service User"
+   sudo dscl . create /Users/_msgraphsync UniqueID $uid
+   sudo dscl . create /Users/_msgraphsync PrimaryGroupID $uid
+   sudo dscl . create /Users/_msgraphsync NFSHomeDirectory /var/empty
    ```
 
 2. **Create launch daemon**:
    ```bash
-   sudo tee /Library/LaunchDaemons/com.yourorg.intune-device-sync.plist > /dev/null <<EOF
+   sudo tee /Library/LaunchDaemons/com.gracesolutions.msgraph-db-synchronizer.plist > /dev/null <<EOF
    <?xml version="1.0" encoding="UTF-8"?>
    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
    <plist version="1.0">
    <dict>
        <key>Label</key>
-       <string>com.yourorg.intune-device-sync</string>
+       <string>com.gracesolutions.msgraph-db-synchronizer</string>
        <key>ProgramArguments</key>
        <array>
-           <string>/opt/intune-device-sync/IntuneDeviceDatabaseSynchronization</string>
+           <string>/opt/msgraph-db-synchronizer/MSGraphDBSynchronizer</string>
            <string>run</string>
        </array>
        <key>WorkingDirectory</key>
-       <string>/opt/intune-device-sync</string>
+       <string>/opt/msgraph-db-synchronizer</string>
        <key>RunAtLoad</key>
        <true/>
        <key>KeepAlive</key>
        <true/>
+       <key>StandardOutPath</key>
+       <string>/var/log/msgraph-db-synchronizer.log</string>
+       <key>StandardErrorPath</key>
+       <string>/var/log/msgraph-db-synchronizer.error.log</string>
+       <key>UserName</key>
+       <string>_msgraphsync</string>
+       <key>GroupName</key>
+       <string>_msgraphsync</string>
    </dict>
    </plist>
    EOF
    ```
 
-3. **Load and start service**:
+3. **Set permissions and load service**:
    ```bash
-   sudo launchctl load /Library/LaunchDaemons/com.yourorg.intune-device-sync.plist
-   sudo launchctl start com.yourorg.intune-device-sync
+   sudo chown root:wheel /Library/LaunchDaemons/com.gracesolutions.msgraph-db-synchronizer.plist
+   sudo chmod 644 /Library/LaunchDaemons/com.gracesolutions.msgraph-db-synchronizer.plist
+   sudo launchctl load /Library/LaunchDaemons/com.gracesolutions.msgraph-db-synchronizer.plist
    ```
 
 ## Verification
 
 1. **Check service status**:
    ```bash
+   # All platforms (unified command)
+   sudo ./MSGraphDBSynchronizer status
+
+   # Platform-specific alternatives:
    # Windows
    MSGraphDBSynchronizer.exe status
 

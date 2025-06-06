@@ -17,6 +17,7 @@ mod metrics;
 mod mock_graph_api;
 mod path_utils;
 mod rate_limiter;
+mod service_manager;
 mod storage;
 mod sync;
 mod uuid_utils;
@@ -86,138 +87,27 @@ async fn main() -> Result<()> {
 }
 
 async fn install_service() -> Result<()> {
-    #[cfg(windows)]
-    {
-        use std::ffi::OsString;
-        use windows_service::{
-            service::{ServiceAccess, ServiceErrorControl, ServiceInfo, ServiceStartType, ServiceType},
-            service_manager::{ServiceManager, ServiceManagerAccess},
-        };
-
-        let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CREATE_SERVICE)?;
-        
-        let service_info = ServiceInfo {
-            name: OsString::from(version::get_product_name()),
-            display_name: OsString::from(format!("{} Service", version::get_product_name())),
-            service_type: ServiceType::OWN_PROCESS,
-            start_type: ServiceStartType::AutoStart,
-            error_control: ServiceErrorControl::Normal,
-            executable_path: std::env::current_exe()?,
-            launch_arguments: vec![OsString::from("run")],
-            dependencies: vec![],
-            account_name: None,
-            account_password: None,
-        };
-
-        let _service = manager.create_service(&service_info, ServiceAccess::CHANGE_CONFIG)?;
-        println!("Service installed successfully");
-    }
-
-    #[cfg(not(windows))]
-    {
-        println!("Service installation not implemented for this platform");
-    }
-
-    Ok(())
+    service_manager::ServiceManager::install().await
 }
 
 async fn uninstall_service() -> Result<()> {
-    #[cfg(windows)]
-    {
-        use windows_service::{
-            service_manager::{ServiceManager, ServiceManagerAccess},
-        };
-
-        let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
-        let service = manager.open_service(version::get_product_name(), windows_service::service::ServiceAccess::DELETE)?;
-        service.delete()?;
-        println!("Service uninstalled successfully");
-    }
-
-    #[cfg(not(windows))]
-    {
-        println!("Service uninstallation not implemented for this platform");
-    }
-
-    Ok(())
+    service_manager::ServiceManager::uninstall().await
 }
 
 async fn start_service() -> Result<()> {
-    #[cfg(windows)]
-    {
-        use windows_service::{
-            service::ServiceAccess,
-            service_manager::{ServiceManager, ServiceManagerAccess},
-        };
-
-        let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
-        let service = manager.open_service(version::get_product_name(), ServiceAccess::START)?;
-        service.start(&[] as &[&str])?;
-        println!("Service started successfully");
-    }
-
-    #[cfg(not(windows))]
-    {
-        println!("Service start not implemented for this platform");
-    }
-
-    Ok(())
+    service_manager::ServiceManager::start().await
 }
 
 async fn stop_service() -> Result<()> {
-    #[cfg(windows)]
-    {
-        use windows_service::{
-            service::ServiceAccess,
-            service_manager::{ServiceManager, ServiceManagerAccess},
-        };
-
-        let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
-        let service = manager.open_service(version::get_product_name(), ServiceAccess::STOP)?;
-        service.stop()?;
-        println!("Service stopped successfully");
-    }
-
-    #[cfg(not(windows))]
-    {
-        println!("Service stop not implemented for this platform");
-    }
-
-    Ok(())
+    service_manager::ServiceManager::stop().await
 }
 
 async fn restart_service() -> Result<()> {
-    stop_service().await?;
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-    start_service().await
+    service_manager::ServiceManager::restart().await
 }
 
 async fn show_status() -> Result<()> {
-    #[cfg(windows)]
-    {
-        use windows_service::{
-            service::ServiceAccess,
-            service_manager::{ServiceManager, ServiceManagerAccess},
-        };
-
-        let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
-        match manager.open_service(version::get_product_name(), ServiceAccess::QUERY_STATUS) {
-            Ok(service) => {
-                let status = service.query_status()?;
-                println!("Service Status: {:?}", status.current_state);
-            }
-            Err(_) => {
-                println!("Service not installed");
-            }
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        println!("Service status not implemented for this platform");
-    }
-
-    Ok(())
+    service_manager::ServiceManager::status().await
 }
 
 async fn run_service() -> Result<()> {

@@ -731,15 +731,7 @@ impl ConfigValidator {
                 None,
             );
 
-            // Device count validation
-            if mock_config.device_count > 10000 {
-                self.add_warning(
-                    "mockGraphApi.deviceCount".to_string(),
-                    ValidationWarningType::Performance,
-                    "Very high mock device count may impact performance".to_string(),
-                    "Consider using <= 1000 devices for testing".to_string(),
-                );
-            }
+            // Note: Device count validation is now per-endpoint via mockObjectCount
 
             // Probability validations
             if mock_config.rate_limit_probability > 1.0 || mock_config.rate_limit_probability < 0.0 {

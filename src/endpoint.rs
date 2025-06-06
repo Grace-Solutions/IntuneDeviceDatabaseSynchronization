@@ -1,10 +1,36 @@
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, Context};
-use log::{info, debug};
+use log::{info, debug, warn};
 use std::collections::HashMap;
+use std::time::Duration;
 use reqwest::Client;
+use tokio::time::sleep;
 use crate::auth::AuthClient;
 use crate::mock_graph_api::MockGraphApi;
+use crate::rate_limiter::{RateLimitedClient, RateLimitConfig};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EndpointMockConfig {
+    /// Number of objects to generate for this endpoint
+    #[serde(rename = "objectCount", default = "default_object_count")]
+    pub object_count: u32,
+    /// Whether to enable mock data generation for this endpoint
+    #[serde(default = "default_enabled")]
+    pub enabled: bool,
+}
+
+impl Default for EndpointMockConfig {
+    fn default() -> Self {
+        Self {
+            object_count: default_object_count(),
+            enabled: true,
+        }
+    }
+}
+
+fn default_object_count() -> u32 {
+    1000
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointConfig {
@@ -19,6 +45,9 @@ pub struct EndpointConfig {
     /// Enable this endpoint for synchronization
     #[serde(default = "default_enabled")]
     pub enabled: bool,
+    /// Number of mock objects to generate for this endpoint
+    #[serde(rename = "mockObjectCount")]
+    pub mock_object_count: Option<u32>,
     /// Sync interval override (optional, uses global if not set)
     #[serde(rename = "syncInterval")]
     pub sync_interval: Option<String>,
@@ -33,6 +62,9 @@ pub struct EndpointConfig {
     /// Custom field mappings for database storage
     #[serde(rename = "fieldMappings", default)]
     pub field_mappings: HashMap<String, String>,
+    /// Mock API configuration for this endpoint
+    #[serde(rename = "mockConfig")]
+    pub mock_config: Option<EndpointMockConfig>,
 }
 
 impl Default for EndpointConfig {
@@ -42,11 +74,16 @@ impl Default for EndpointConfig {
             endpoint_url: "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices".to_string(),
             table_name: "devices".to_string(),
             enabled: true,
+            mock_object_count: Some(30000),
             sync_interval: None,
             query_params: HashMap::new(),
             select_fields: None,
             filter: None,
             field_mappings: HashMap::new(),
+            mock_config: Some(EndpointMockConfig {
+                object_count: 30000,
+                enabled: true,
+            }),
         }
     }
 }
@@ -120,23 +157,34 @@ impl EndpointsConfig {
     }
 }
 
-#[derive(Debug)]
 pub struct EndpointManager {
     config: EndpointsConfig,
     auth_client: AuthClient,
     http_client: Client,
+    rate_limited_client: Option<RateLimitedClient>,
     mock_api: Option<MockGraphApi>,
 }
 
 impl EndpointManager {
-    pub fn new(config: EndpointsConfig, auth_client: AuthClient, mock_api_config: Option<crate::mock_graph_api::MockGraphApiConfig>) -> Self {
+    pub fn new(
+        config: EndpointsConfig,
+        auth_client: AuthClient,
+        mock_api_config: Option<crate::mock_graph_api::MockGraphApiConfig>,
+        rate_limit_config: Option<RateLimitConfig>
+    ) -> Self {
         let http_client = Client::new();
         let mock_api = mock_api_config.map(|config| MockGraphApi::new(config));
+
+        // Create rate limited client if config is provided
+        let rate_limited_client = rate_limit_config.map(|config| {
+            RateLimitedClient::new(http_client.clone(), config)
+        });
 
         Self {
             config,
             auth_client,
             http_client,
+            rate_limited_client,
             mock_api,
         }
     }
@@ -150,12 +198,16 @@ impl EndpointManager {
     pub async fn fetch_endpoint_data(&self, endpoint: &EndpointConfig) -> Result<serde_json::Value> {
         info!("Fetching data from endpoint: {} ({})", endpoint.name, endpoint.endpoint_url);
 
-        // Check if mock API is enabled and handle devices endpoint
+        // Check if mock API is enabled and handle supported endpoints
         if let Some(ref mock_api) = self.mock_api {
-            if mock_api.is_enabled() && endpoint.name == "devices" {
-                info!("Using mock API for devices endpoint");
-                let mock_response = mock_api.get_managed_devices(None, None).await?;
-                return Ok(serde_json::to_value(mock_response)?);
+            if mock_api.is_enabled() {
+                info!("Using mock API for {} endpoint", endpoint.name);
+
+                // Extract skip and top parameters from URL
+                let (skip, top) = self.extract_pagination_params(&endpoint.endpoint_url);
+
+                // Retry logic for mock API with dynamic endpoint support
+                return self.fetch_mock_data_with_retry(mock_api, &endpoint.name, skip, top).await;
             }
         }
 
@@ -267,6 +319,96 @@ impl EndpointManager {
     pub fn get_config(&self) -> &EndpointsConfig {
         &self.config
     }
+
+    /// Extract skip and top parameters from URL query string
+    fn extract_pagination_params(&self, url: &str) -> (Option<u32>, Option<u32>) {
+        let parsed_url = match url::Url::parse(url) {
+            Ok(url) => url,
+            Err(_) => return (None, None),
+        };
+
+        let mut skip = None;
+        let mut top = None;
+
+        for (key, value) in parsed_url.query_pairs() {
+            match key.as_ref() {
+                "$skip" => {
+                    if let Ok(skip_val) = value.parse::<u32>() {
+                        skip = Some(skip_val);
+                    }
+                }
+                "$top" => {
+                    if let Ok(top_val) = value.parse::<u32>() {
+                        top = Some(top_val);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        (skip, top)
+    }
+
+    /// Fetch mock data with retry logic for rate limits and transient failures
+    async fn fetch_mock_data_with_retry(
+        &self,
+        mock_api: &MockGraphApi,
+        endpoint_name: &str,
+        skip: Option<u32>,
+        top: Option<u32>
+    ) -> Result<serde_json::Value> {
+        const MAX_RETRIES: u32 = 5;
+        const INITIAL_DELAY: Duration = Duration::from_secs(1);
+        const BACKOFF_MULTIPLIER: f64 = 2.0;
+
+        let mut attempt = 1;
+        let mut delay = INITIAL_DELAY;
+
+        loop {
+            // Get endpoint configuration to pass to mock API
+            let endpoint_config = self.config.get_endpoint_by_name(endpoint_name);
+            let result = mock_api.get_endpoint_data(endpoint_name, endpoint_config, skip, top).await;
+
+            match result {
+                Ok(response) => {
+                    if attempt > 1 {
+                        info!("Mock API request succeeded on attempt {}", attempt);
+                    }
+                    return Ok(serde_json::to_value(response)?);
+                }
+                Err(e) => {
+                    let error_msg = e.to_string();
+
+                    // Check if this is a retryable error
+                    let is_retryable = error_msg.contains("Rate limited") ||
+                                     error_msg.contains("429") ||
+                                     error_msg.contains("Network error") ||
+                                     error_msg.contains("timeout");
+
+                    if !is_retryable || attempt >= MAX_RETRIES {
+                        warn!("Mock API request failed after {} attempts: {}", attempt, e);
+                        return Err(e);
+                    }
+
+                    warn!("Mock API request failed (attempt {}), retrying in {:?}: {}",
+                          attempt, delay, e);
+
+                    sleep(delay).await;
+
+                    // Exponential backoff with jitter
+                    delay = Duration::from_millis(
+                        (delay.as_millis() as f64 * BACKOFF_MULTIPLIER) as u64 +
+                        (std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .subsec_millis() % 100) as u64
+                    );
+
+                    attempt += 1;
+                }
+            }
+        }
+    }
 }
 
 /// Predefined endpoint configurations for common Microsoft Graph endpoints
@@ -280,11 +422,16 @@ impl PredefinedEndpoints {
             endpoint_url: "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices".to_string(),
             table_name: "devices".to_string(),
             enabled: true,
+            mock_object_count: Some(30000),
             sync_interval: None,
             query_params: HashMap::new(),
             select_fields: None,
             filter: None,
             field_mappings: HashMap::new(),
+            mock_config: Some(EndpointMockConfig {
+                object_count: 30000,
+                enabled: true,
+            }),
         }
     }
 
@@ -311,6 +458,11 @@ impl PredefinedEndpoints {
             ]),
             filter: None,
             field_mappings: HashMap::new(),
+            mock_object_count: Some(5000),
+            mock_config: Some(EndpointMockConfig {
+                object_count: 5000,
+                enabled: true,
+            }),
         }
     }
 
@@ -321,6 +473,7 @@ impl PredefinedEndpoints {
             endpoint_url: "https://graph.microsoft.com/v1.0/groups".to_string(),
             table_name: "groups".to_string(),
             enabled: false, // Disabled by default
+            mock_object_count: Some(1000),
             sync_interval: None,
             query_params: HashMap::new(),
             select_fields: Some(vec![
@@ -335,6 +488,10 @@ impl PredefinedEndpoints {
             ]),
             filter: None,
             field_mappings: HashMap::new(),
+            mock_config: Some(EndpointMockConfig {
+                object_count: 1000,
+                enabled: true,
+            }),
         }
     }
 
@@ -345,11 +502,16 @@ impl PredefinedEndpoints {
             endpoint_url: "https://graph.microsoft.com/v1.0/deviceManagement/deviceCompliancePolicies".to_string(),
             table_name: "compliance_policies".to_string(),
             enabled: false, // Disabled by default
+            mock_object_count: Some(100),
             sync_interval: None,
             query_params: HashMap::new(),
             select_fields: None,
             filter: None,
             field_mappings: HashMap::new(),
+            mock_config: Some(EndpointMockConfig {
+                object_count: 100,
+                enabled: true,
+            }),
         }
     }
 
@@ -386,22 +548,26 @@ mod tests {
                     endpoint_url: "https://graph.microsoft.com/v1.0/deviceManagement/managedDevices".to_string(),
                     table_name: "devices".to_string(),
                     enabled: true,
+                    mock_object_count: None,
                     sync_interval: None,
                     query_params: HashMap::new(),
                     select_fields: None,
                     filter: None,
                     field_mappings: HashMap::new(),
+                    mock_config: None,
                 },
                 EndpointConfig {
                     name: "users".to_string(),
                     endpoint_url: "https://graph.microsoft.com/v1.0/users".to_string(),
                     table_name: "users".to_string(),
                     enabled: true,
+                    mock_object_count: None,
                     sync_interval: None,
                     query_params: HashMap::new(),
                     select_fields: None,
                     filter: None,
                     field_mappings: HashMap::new(),
+                    mock_config: None,
                 },
             ],
         };
