@@ -4,22 +4,8 @@ use std::fs;
 use std::path::Path;
 
 fn main() {
-    // Use version from Cargo.toml for releases, or generate timestamp-based version for development
-    let version = if env::var("CARGO_PKG_VERSION").unwrap_or_default() != "0.0.0" {
-        // Use the version from Cargo.toml for releases
-        env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "2.0.0".to_string())
-    } else {
-        // Generate version based on current timestamp for development builds
-        let now: DateTime<Utc> = Utc::now();
-        format!("{}.{:02}.{:02}.{:02}{:02}",
-            now.year(),
-            now.month(),
-            now.day(),
-            now.hour(),
-            now.minute()
-        )
-    };
-
+    // Always use the version from Cargo.toml for consistency
+    let version = env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "2.0.0".to_string());
     let now: DateTime<Utc> = Utc::now();
     
     // Write version to a file that can be included in the binary
